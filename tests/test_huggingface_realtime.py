@@ -160,6 +160,7 @@ async def test_partial_transcription_uses_latest_snapshot(monkeypatch: Any) -> N
 
     await handler._run_realtime_session()
 
+    assert handler.connection is None
     assert handler.input_transcript_chunks_by_item.item_id == "item-1"
     assert handler.input_transcript_chunks_by_item.deltas == ["Hey, how are you?"]
 

@@ -932,6 +932,11 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
                                 AdditionalOutputs({"role": "assistant", "content": f"[error] {msg}"})
                             )
             finally:
+                # Mark this session closed before cancelling its sender. A pending
+                # wait may complete concurrently with cancellation on Python 3.11;
+                # the worker must not start another response cycle in that case.
+                if self.connection is conn:
+                    self.connection = None
                 # Stop the response sender worker.
                 if response_sender_task is not None:
                     response_sender_task.cancel()
