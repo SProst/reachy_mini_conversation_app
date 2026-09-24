@@ -111,6 +111,7 @@ def benchmark_handler(
 
         if handler_name == "kokoro":
             from speech_to_speech.TTS.kokoro_handler import KokoroTTSHandler
+
             setup_kwargs = {"device": "auto", **setup_kwargs}
             handler = KokoroTTSHandler(
                 stop_event,
@@ -121,6 +122,7 @@ def benchmark_handler(
             )
         elif handler_name == "pocket_tts":
             from speech_to_speech.TTS.pocket_tts_handler import PocketTTSHandler
+
             setup_kwargs = {"device": "cpu", **setup_kwargs}
             handler = PocketTTSHandler(
                 stop_event,
@@ -131,6 +133,7 @@ def benchmark_handler(
             )
         elif handler_name == "qwen3":
             from speech_to_speech.TTS.qwen3_tts_handler import Qwen3TTSHandler
+
             setup_kwargs = {
                 "device": "cuda",
                 "model_name": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
@@ -146,6 +149,7 @@ def benchmark_handler(
             )
         elif handler_name == "chatTTS":
             from speech_to_speech.TTS.chatTTS_handler import ChatTTSHandler
+
             setup_kwargs = {"device": "cuda", **setup_kwargs}
             handler = ChatTTSHandler(
                 stop_event,
@@ -156,6 +160,7 @@ def benchmark_handler(
             )
         elif handler_name == "facebookMMS":
             from speech_to_speech.TTS.facebookmms_handler import FacebookMMSTTSHandler
+
             setup_kwargs = {"device": "cuda", "language": "en", **setup_kwargs}
             handler = FacebookMMSTTSHandler(
                 stop_event,
@@ -166,6 +171,7 @@ def benchmark_handler(
             )
         elif handler_name == "supertonic":
             from speech_to_speech.TTS.supertonic_tts_handler import SupertonicTTSHandler
+
             setup_kwargs = {"voice": "M1", **setup_kwargs}
             handler = SupertonicTTSHandler(
                 stop_event,
@@ -181,7 +187,7 @@ def benchmark_handler(
         logger.info(f"Handler {handler_name} initialized and warmed up in {result.warmup_time:.3f}s")
 
         for i in range(iterations):
-            logger.info(f"Iteration {i+1}/{iterations} for {handler_name}")
+            logger.info(f"Iteration {i + 1}/{iterations} for {handler_name}")
             start_time = time.perf_counter()
             time_to_first_chunk = None
             first_output = True

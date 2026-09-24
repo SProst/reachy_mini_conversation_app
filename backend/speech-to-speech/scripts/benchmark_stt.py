@@ -95,11 +95,13 @@ def load_audio(audio_path: str) -> np.ndarray:
         logger.warning(f"Audio sample rate is {sample_rate}Hz, resampling to 16000Hz")
         try:
             import librosa
+
             audio = librosa.resample(audio, orig_sr=sample_rate, target_sr=16000)
         except ImportError:
             logger.error("librosa not installed. Please install it with: pip install librosa")
             logger.error("Attempting scipy resampling as fallback...")
             from scipy import signal
+
             # Calculate resampling ratio
             num_samples = int(len(audio) * 16000 / sample_rate)
             audio = signal.resample(audio, num_samples)
@@ -108,10 +110,7 @@ def load_audio(audio_path: str) -> np.ndarray:
 
 
 def benchmark_handler(
-    handler_name: str,
-    audio: np.ndarray,
-    iterations: int,
-    handler_kwargs: Optional[Dict[str, Any]] = None
+    handler_name: str, audio: np.ndarray, iterations: int, handler_kwargs: Optional[Dict[str, Any]] = None
 ) -> BenchmarkResult:
     """Benchmark a single STT handler."""
     logger.info(f"Benchmarking {handler_name}...")
@@ -126,59 +125,50 @@ def benchmark_handler(
         handler: Any = None
         if handler_name == "whisper":
             from speech_to_speech.STT.whisper_stt_handler import WhisperSTTHandler
+
             setup_kwargs = handler_kwargs or {
                 "model_name": "distil-whisper/distil-large-v3",
                 "device": "cuda",
                 "torch_dtype": "float16",
             }
-            handler = WhisperSTTHandler(
-                stop_event,
-                queue_in=queue_in,
-                queue_out=queue_out,
-                setup_kwargs=setup_kwargs
-            )
+            handler = WhisperSTTHandler(stop_event, queue_in=queue_in, queue_out=queue_out, setup_kwargs=setup_kwargs)
 
         elif handler_name == "whisper-mlx":
             from speech_to_speech.STT.lightning_whisper_mlx_handler import LightningWhisperSTTHandler
+
             setup_kwargs = handler_kwargs or {
                 "model_name": "large-v3",
                 "device": "mps",
             }
             handler = LightningWhisperSTTHandler(
-                stop_event,
-                queue_in=queue_in,
-                queue_out=queue_out,
-                setup_kwargs=setup_kwargs
+                stop_event, queue_in=queue_in, queue_out=queue_out, setup_kwargs=setup_kwargs
             )
 
         elif handler_name == "mlx-audio-whisper":
             from speech_to_speech.STT.mlx_audio_whisper_handler import MLXAudioWhisperSTTHandler
+
             setup_kwargs = handler_kwargs or {
                 "model_name": "mlx-community/whisper-large-v3-turbo",
             }
             handler = MLXAudioWhisperSTTHandler(
-                stop_event,
-                queue_in=queue_in,
-                queue_out=queue_out,
-                setup_kwargs=setup_kwargs
+                stop_event, queue_in=queue_in, queue_out=queue_out, setup_kwargs=setup_kwargs
             )
 
         elif handler_name == "faster-whisper":
             from speech_to_speech.STT.faster_whisper_handler import FasterWhisperSTTHandler
+
             setup_kwargs = handler_kwargs or {
                 "model_name": "large-v3",
                 "device": "auto",
                 "compute_type": "float16",
             }
             handler = FasterWhisperSTTHandler(
-                stop_event,
-                queue_in=queue_in,
-                queue_out=queue_out,
-                setup_kwargs=setup_kwargs
+                stop_event, queue_in=queue_in, queue_out=queue_out, setup_kwargs=setup_kwargs
             )
 
         elif handler_name == "moonshine":
             from archive.STT.moonshine_handler import MoonshineSTTHandler
+
             handler = MoonshineSTTHandler(
                 stop_event,
                 queue_in=queue_in,
@@ -187,29 +177,25 @@ def benchmark_handler(
 
         elif handler_name == "parakeet-tdt":
             from speech_to_speech.STT.parakeet_tdt_handler import ParakeetTDTSTTHandler
+
             setup_kwargs = handler_kwargs or {
                 "device": "mps",
                 "enable_live_transcription": False,
             }
             handler = ParakeetTDTSTTHandler(
-                stop_event,
-                queue_in=queue_in,
-                queue_out=queue_out,
-                setup_kwargs=setup_kwargs
+                stop_event, queue_in=queue_in, queue_out=queue_out, setup_kwargs=setup_kwargs
             )
 
         elif handler_name == "parakeet-tdt-progressive":
             from speech_to_speech.STT.parakeet_tdt_handler import ParakeetTDTSTTHandler
+
             setup_kwargs = handler_kwargs or {
                 "device": "mps",
                 "enable_live_transcription": True,
                 "live_transcription_update_interval": 0.25,
             }
             handler = ParakeetTDTSTTHandler(
-                stop_event,
-                queue_in=queue_in,
-                queue_out=queue_out,
-                setup_kwargs=setup_kwargs
+                stop_event, queue_in=queue_in, queue_out=queue_out, setup_kwargs=setup_kwargs
             )
         else:
             raise ValueError(f"Unknown handler: {handler_name}")
@@ -223,7 +209,7 @@ def benchmark_handler(
 
         # Run benchmark iterations
         for i in range(iterations):
-            logger.info(f"Iteration {i+1}/{iterations} for {handler_name}")
+            logger.info(f"Iteration {i + 1}/{iterations} for {handler_name}")
 
             start_time = time.perf_counter()
 
@@ -265,9 +251,9 @@ def benchmark_handler(
 
 def print_results(results: List[BenchmarkResult]):
     """Print benchmark results in a formatted table."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("BENCHMARK RESULTS")
-    print("="*80)
+    print("=" * 80)
 
     for result in results:
         stats = result.get_stats()
@@ -286,7 +272,7 @@ def print_results(results: List[BenchmarkResult]):
         print(f"  Std Deviation:        {stats['std_inference_time']:.4f}s")
 
         # Print time to first token stats if available
-        if 'avg_time_to_first_token' in stats:
+        if "avg_time_to_first_token" in stats:
             print("\n  Time to First Token:")
             print(f"    Avg TTFT:           {stats['avg_time_to_first_token']:.4f}s")
             print(f"    Min TTFT:           {stats['min_time_to_first_token']:.4f}s")
@@ -296,13 +282,13 @@ def print_results(results: List[BenchmarkResult]):
         print(f"\n  Total Iterations:     {stats['total_iterations']}")
         print(f"  Sample Transcription: {stats['sample_transcription']}")
 
-        if stats['errors']:
+        if stats["errors"]:
             print(f"  Errors: {stats['errors']}")
 
     # Comparison table
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("COMPARISON (Average Inference Time)")
-    print("="*80)
+    print("=" * 80)
 
     successful_results = [r for r in results if r.inference_times]
     if successful_results:
@@ -324,7 +310,7 @@ def save_results(results: List[BenchmarkResult], output_file: str):
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
 
-    with open(output_file, 'w') as f:
+    with open(output_file, "w") as f:
         json.dump(data, f, indent=2)
 
     logger.info(f"Results saved to: {output_file}")
@@ -332,29 +318,26 @@ def save_results(results: List[BenchmarkResult], output_file: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmark STT handlers")
-    parser.add_argument(
-        "--audio_file",
-        type=str,
-        required=True,
-        help="Path to audio file for benchmarking"
-    )
+    parser.add_argument("--audio_file", type=str, required=True, help="Path to audio file for benchmarking")
     parser.add_argument(
         "--handlers",
         nargs="+",
-        default=["whisper", "whisper-mlx", "mlx-audio-whisper", "faster-whisper", "parakeet-tdt", "parakeet-tdt-progressive"],
-        help="List of handlers to benchmark (default: all)"
+        default=[
+            "whisper",
+            "whisper-mlx",
+            "mlx-audio-whisper",
+            "faster-whisper",
+            "parakeet-tdt",
+            "parakeet-tdt-progressive",
+        ],
+        help="List of handlers to benchmark (default: all)",
     )
-    parser.add_argument(
-        "--iterations",
-        type=int,
-        default=5,
-        help="Number of iterations per handler (default: 5)"
-    )
+    parser.add_argument("--iterations", type=int, default=5, help="Number of iterations per handler (default: 5)")
     parser.add_argument(
         "--output",
         type=str,
         default="stt_benchmark_results.json",
-        help="Output JSON file for results (default: stt_benchmark_results.json)"
+        help="Output JSON file for results (default: stt_benchmark_results.json)",
     )
 
     args = parser.parse_args()
@@ -366,7 +349,7 @@ def main():
 
     # Load audio
     audio = load_audio(args.audio_file)
-    logger.info(f"Audio loaded: {len(audio)} samples, {len(audio)/16000:.2f}s duration")
+    logger.info(f"Audio loaded: {len(audio)} samples, {len(audio) / 16000:.2f}s duration")
 
     # Run benchmarks
     results = []

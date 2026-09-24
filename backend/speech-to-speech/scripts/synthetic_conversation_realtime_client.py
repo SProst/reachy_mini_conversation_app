@@ -325,10 +325,7 @@ async def run_client(
             connect_url = alloc["connect_url"]
             lb_session_id = alloc["session_id"]
             lb_session_token = alloc["session_token"]
-            logger.info(
-                f"{prefix} LB allocated session_id={lb_session_id} "
-                f"ws_url={alloc.get('websocket_url', '?')}"
-            )
+            logger.info(f"{prefix} LB allocated session_id={lb_session_id} ws_url={alloc.get('websocket_url', '?')}")
         else:
             connect_url = ws_url
 
@@ -382,22 +379,17 @@ async def run_client(
                                 await stream_prompt(ws, turn_audio)
                             except websockets.exceptions.ConnectionClosed as e:
                                 logger.info(
-                                    f"{prefix} turn {turn_idx + 1}/{args.turns} "
-                                    f"connection closed during send: {e}"
+                                    f"{prefix} turn {turn_idx + 1}/{args.turns} connection closed during send: {e}"
                                 )
                                 log_f.write(f"[turn {turn_idx + 1}/{args.turns}] CONNECTION_CLOSED: {e}\n")
                                 summary["error_msg"] = f"connection_closed: {e}"
                                 break
 
-                            info = await consume_until_response_done(
-                                ws, response_audio, args.response_timeout
-                            )
+                            info = await consume_until_response_done(ws, response_audio, args.response_timeout)
                             turn_elapsed = time.monotonic() - turn_start
 
                             if info["error"]:
-                                logger.info(
-                                    f"{prefix} turn {turn_idx + 1}/{args.turns} ERROR: {info['error']}"
-                                )
+                                logger.info(f"{prefix} turn {turn_idx + 1}/{args.turns} ERROR: {info['error']}")
                                 log_f.write(f"[turn {turn_idx + 1}/{args.turns}] ERROR: {info['error']}\n\n")
                                 summary["errors"] += 1
                             else:
@@ -423,9 +415,7 @@ async def run_client(
             # Step 5: release the LB slot, regardless of how the ws session ended.
             if lb_session_id and lb_session_token:
                 try:
-                    await _lb_send_event(
-                        args.lb_url, lb_session_id, lb_session_token, "disconnected", http
-                    )
+                    await _lb_send_event(args.lb_url, lb_session_id, lb_session_token, "disconnected", http)
                     logger.info(f"{prefix} LB notified: disconnected")
                 except Exception as e:  # noqa: BLE001
                     logger.warning(f"{prefix} LB 'disconnected' callback failed: {e}")
@@ -460,8 +450,7 @@ async def run_all(args: argparse.Namespace) -> None:
     token = os.environ.get("HF_TOKEN")
     if not token:
         raise SystemExit(
-            "HF_TOKEN env var is not set. Export it before running this script "
-            "(e.g. `export HF_TOKEN=hf_...`)."
+            "HF_TOKEN env var is not set. Export it before running this script (e.g. `export HF_TOKEN=hf_...`)."
         )
     extra_headers: list[tuple[str, str]] = [("Authorization", f"Bearer {token}")]
     logger.info("Auth: Bearer token attached from HF_TOKEN env")
@@ -470,8 +459,7 @@ async def run_all(args: argparse.Namespace) -> None:
     else:
         target = ws_url
     logger.info(
-        f"Spawning {args.clients} client(s) against {target}, "
-        f"{args.turns} turns each @ {args.interval:.1f}s interval"
+        f"Spawning {args.clients} client(s) against {target}, {args.turns} turns each @ {args.interval:.1f}s interval"
     )
 
     summaries = await asyncio.gather(

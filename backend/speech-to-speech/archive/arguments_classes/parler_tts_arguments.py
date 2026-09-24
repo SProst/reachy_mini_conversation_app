@@ -6,15 +6,11 @@ from typing import Optional
 class ParlerTTSHandlerArguments:
     tts_model_name: str = field(
         default="parler-tts/parler-mini-v1-jenny",
-        metadata={
-            "help": "The pretrained TTS model to use. Default is 'parler-tts/parler-mini-v1-jenny'."
-        },
+        metadata={"help": "The pretrained TTS model to use. Default is 'parler-tts/parler-mini-v1-jenny'."},
     )
     tts_device: str = field(
         default="cuda",
-        metadata={
-            "help": "The device type on which the model will run. Default is 'cuda' for GPU acceleration."
-        },
+        metadata={"help": "The device type on which the model will run. Default is 'cuda' for GPU acceleration."},
     )
     tts_torch_dtype: str = field(
         default="float16",
@@ -41,12 +37,8 @@ class ParlerTTSHandlerArguments:
         },
     )
     description: str = field(
-        default=(
-            "Jenny speaks at a slightly slow pace with an animated delivery with clear audio quality."
-        ),
-        metadata={
-            "help": "Description of the speaker's voice and speaking style to guide the TTS model."
-        },
+        default=("Jenny speaks at a slightly slow pace with an animated delivery with clear audio quality."),
+        metadata={"help": "Description of the speaker's voice and speaking style to guide the TTS model."},
     )
     play_steps_s: float = field(
         default=1.0,
@@ -62,7 +54,5 @@ class ParlerTTSHandlerArguments:
     )
     use_default_speakers_list: bool = field(
         default=False,
-        metadata={
-            "help": "Whether to use the default list of speakers or not."
-        },
+        metadata={"help": "Whether to use the default list of speakers or not."},
     )

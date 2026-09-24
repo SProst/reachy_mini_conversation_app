@@ -8,6 +8,7 @@ Runtime-supported values in `s2s_pipeline.py`:
 - `facebookMMS` → `facebookmms_handler.py`
 - `pocket` → `pocket_tts_handler.py`
 - `kokoro` → `kokoro_handler.py`
+- `magpie` → `magpie_tts_handler.py` (NeMo-Speech.cpp)
 - `qwen3` → `qwen3_tts_handler.py`
 - `supertonic` → `supertonic_tts_handler.py`
 
@@ -72,7 +73,24 @@ Behavior:
 - Uses native kokoro pipeline otherwise (`hexgrad/Kokoro-82M`)
 - Can auto-switch voice/language based on STT language code mapping
 
-### 5) Qwen3-TTS (`--tts qwen3`)
+### 5) MagpieTTS (`--tts magpie`)
+
+This backend streams PCM16 from the stable NeMo-Speech.cpp TTS C API. It requires the v2602 Magpie GGUF,
+the NanoCodec decoder GGUF, tokenizer assets extracted by `nemo-speech pull magpie`, and the native shared library.
+Set their paths with `NEMO_SPEECH_TTS_MODEL_PATH`, `NEMO_SPEECH_TTS_CODEC_PATH`,
+`NEMO_SPEECH_TTS_TOKENIZER_PATH`, and `NEMO_SPEECH_TTS_LIBRARY`.
+
+Available voices: `Aria`, `Jason`, `John`, `Leo`, and `Sofia`.
+
+```bash
+speech-to-speech serve \
+  --tts magpie \
+  --magpie_tts_device cuda \
+  --magpie_tts_voice Aria \
+  --magpie_tts_language en-US
+```
+
+### 6) Qwen3-TTS (`--tts qwen3`)
 
 Primary args prefix: `--qwen3_tts_*`
 

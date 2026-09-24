@@ -59,9 +59,7 @@ class ParlerTTSHandler(BaseHandler[TTSInput | EndOfResponse]):
         compile_mode=None,
         gen_kwargs={},
         max_prompt_pad_length=8,
-        description=(
-            "Jenny speaks at a slightly slow pace with an animated delivery with clear audio quality."
-        ),
+        description=("Jenny speaks at a slightly slow pace with an animated delivery with clear audio quality."),
         play_steps_s=1,
         blocksize=512,
         use_default_speakers_list=True,
@@ -81,13 +79,12 @@ class ParlerTTSHandler(BaseHandler[TTSInput | EndOfResponse]):
         self.speaker = "Jason"
         self.description = description
 
-        self.model = ParlerTTSForConditionalGeneration.from_pretrained(
-            model_name, torch_dtype=self.torch_dtype
-        ).to(device)
+        self.model = ParlerTTSForConditionalGeneration.from_pretrained(model_name, torch_dtype=self.torch_dtype).to(
+            device
+        )
 
         self.description_tokenizer = AutoTokenizer.from_pretrained(self.model.config.text_encoder._name_or_path)
         self.prompt_tokenizer = AutoTokenizer.from_pretrained(model_name)
-
 
         framerate = self.model.audio_encoder.config.frame_rate
         self.play_steps = int(framerate * play_steps_s)
@@ -101,9 +98,7 @@ class ParlerTTSHandler(BaseHandler[TTSInput | EndOfResponse]):
 
         if self.compile_mode:
             self.model.generation_config.cache_implementation = "static"
-            self.model.forward = torch.compile(
-                self.model.forward, mode=self.compile_mode, fullgraph=True
-            )
+            self.model.forward = torch.compile(self.model.forward, mode=self.compile_mode, fullgraph=True)
 
         self.warmup()
 
@@ -113,23 +108,17 @@ class ParlerTTSHandler(BaseHandler[TTSInput | EndOfResponse]):
         max_length_prompt=50,
         pad=False,
     ):
-        pad_args_prompt = (
-            {"padding": "max_length", "max_length": max_length_prompt} if pad else {}
-        )
+        pad_args_prompt = {"padding": "max_length", "max_length": max_length_prompt} if pad else {}
 
         description = self.description
         if self.use_default_speakers_list:
             description = self.speaker + " " + self.description
 
-        tokenized_description = self.description_tokenizer(
-            description, return_tensors="pt"
-        ).to(self.device)
+        tokenized_description = self.description_tokenizer(description, return_tensors="pt").to(self.device)
         input_ids = tokenized_description.input_ids
         attention_mask = tokenized_description.attention_mask
 
-        tokenized_prompt = self.prompt_tokenizer(
-            prompt, return_tensors="pt", **pad_args_prompt
-        ).to(self.device)
+        tokenized_prompt = self.prompt_tokenizer(prompt, return_tensors="pt", **pad_args_prompt).to(self.device)
         prompt_input_ids = tokenized_prompt.input_ids
         prompt_attention_mask = tokenized_prompt.attention_mask
 
@@ -159,9 +148,7 @@ class ParlerTTSHandler(BaseHandler[TTSInput | EndOfResponse]):
         if self.compile_mode:
             pad_lengths = [2**i for i in range(2, self.max_prompt_pad_length)]
             for pad_length in pad_lengths[::-1]:
-                model_kwargs = self.prepare_model_inputs(
-                    "dummy prompt", max_length_prompt=pad_length, pad=True
-                )
+                model_kwargs = self.prepare_model_inputs("dummy prompt", max_length_prompt=pad_length, pad=True)
                 for _ in range(n_steps):
                     _ = self.model.generate(**model_kwargs)
                 logger.info(f"Warmed up length {pad_length} tokens!")
@@ -215,9 +202,7 @@ class ParlerTTSHandler(BaseHandler[TTSInput | EndOfResponse]):
             **pad_args,
         )
 
-        streamer = ParlerTTSStreamer(
-            self.model, device=self.device, play_steps=self.play_steps
-        )
+        streamer = ParlerTTSStreamer(self.model, device=self.device, play_steps=self.play_steps)
         tts_gen_kwargs = {"streamer": streamer, **tts_gen_kwargs}
         torch.manual_seed(0)
         thread = Thread(target=self.model.generate, kwargs=tts_gen_kwargs)
@@ -229,9 +214,7 @@ class ParlerTTSHandler(BaseHandler[TTSInput | EndOfResponse]):
                 logger.info("TTS generation cancelled (interruption)")
                 return
             if i == 0:
-                logger.info(
-                    f"Time to first audio: {perf_counter() - pipeline_start:.3f}s"
-                )
+                logger.info(f"Time to first audio: {perf_counter() - pipeline_start:.3f}s")
             audio_chunk = librosa.resample(audio_chunk, orig_sr=44100, target_sr=16000)
             audio_chunk = (audio_chunk * 32768).astype(np.int16)
             for i in range(0, len(audio_chunk), self.blocksize):

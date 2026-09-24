@@ -48,8 +48,10 @@ def _unlimited_orgs() -> "set[str]":
     extra = {o.strip().lower() for o in raw.replace(",", " ").split() if o.strip()}
     return _DEFAULT_UNLIMITED_ORGS | extra
 
+
 try:
     from huggingface_hub import attach_huggingface_oauth, parse_huggingface_oauth
+
     _OAUTH_IMPORTABLE = True
 except Exception as exc:  # pragma: no cover - import guard
     logger.info("huggingface_hub OAuth unavailable (%s); sign-in disabled.", exc)
@@ -295,6 +297,10 @@ def set_anon_cookie(response, signed: str) -> None:
     # The Space runs inside an iframe on huggingface.co, so the cookie lives in a
     # cross-site context — it must be SameSite=None; Secure or the browser drops it.
     response.set_cookie(
-        ANON_COOKIE, signed,
-        max_age=_COOKIE_MAX_AGE, httponly=True, samesite="none", secure=True,
+        ANON_COOKIE,
+        signed,
+        max_age=_COOKIE_MAX_AGE,
+        httponly=True,
+        samesite="none",
+        secure=True,
     )

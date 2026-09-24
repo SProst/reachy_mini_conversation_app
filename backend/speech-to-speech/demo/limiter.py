@@ -38,10 +38,10 @@ from pathlib import Path
 logger = logging.getLogger("s2s.limiter")
 
 # ── Tunables (env-overridable) ───────────────────────────────────────────────
-ANON_SEC = int(os.environ.get("LIMIT_ANON_SEC", "300"))   # 5 min/day, not signed in
-FREE_SEC = int(os.environ.get("LIMIT_FREE_SEC", "600"))   # 10 min/day, signed in, no PRO
+ANON_SEC = int(os.environ.get("LIMIT_ANON_SEC", "300"))  # 5 min/day, not signed in
+FREE_SEC = int(os.environ.get("LIMIT_FREE_SEC", "600"))  # 10 min/day, signed in, no PRO
 CHUNK_SEC = int(os.environ.get("RESERVE_CHUNK_SEC", "10"))  # reservation granularity
-HEARTBEAT_SEC = int(os.environ.get("HEARTBEAT_SEC", "5"))   # advertised client cadence
+HEARTBEAT_SEC = int(os.environ.get("HEARTBEAT_SEC", "5"))  # advertised client cadence
 REAP_AFTER_SEC = int(os.environ.get("SESSION_REAP_SEC", "15"))  # silence before sweep
 
 # Stable across restarts or the hashed keys (and signed cookies) rotate and the
@@ -139,10 +139,9 @@ def init() -> None:
 
 # ── Internal helpers (call under _lock) ───────────────────────────────────────
 
+
 def _spent(con, key: str, day: str) -> int:
-    row = con.execute(
-        "SELECT spent_sec FROM usage_daily WHERE user_key=? AND day=?", (key, day)
-    ).fetchone()
+    row = con.execute("SELECT spent_sec FROM usage_daily WHERE user_key=? AND day=?", (key, day)).fetchone()
     return int(row[0]) if row else 0
 
 
@@ -166,6 +165,7 @@ def _add(con, keys, day: str, delta: int) -> None:
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
 
 def remaining(keys, tier: str) -> "int | None":
     """Seconds left today for these keys (None = unlimited). No mutation."""

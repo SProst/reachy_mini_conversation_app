@@ -1,6 +1,6 @@
 import os
 
-os.environ['KERAS_BACKEND'] = 'torch'
+os.environ["KERAS_BACKEND"] = "torch"
 
 import logging
 

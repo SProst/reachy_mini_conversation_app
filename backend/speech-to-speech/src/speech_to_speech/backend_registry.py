@@ -531,7 +531,6 @@ TTS_BACKENDS = build_backend_registry(
                 context_kwargs=True,
             ),
             config_prefix="magpie_tts",
-            required_extra="magpie",
         ),
         BackendSpec(
             "moss",

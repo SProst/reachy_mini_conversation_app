@@ -155,6 +155,7 @@ def agents_sdk_bundle():
         raise HTTPException(status_code=503, detail="Run npm ci in demo/")
     return FileResponse(path, media_type="text/javascript")
 
+
 # Wire HF OAuth before the app serves (no-op unless the OAuth env is present).
 # Sign-in only matters when we're metering (prod Space), so gate it on that.
 AUTH_ENABLED = LIMITER_ENABLED and auth.attach(app)
@@ -361,9 +362,7 @@ async def session(request: Request):
     if tracked:
         rem = await asyncio.to_thread(limiter.remaining, keys, tier)
         if rem is not None and rem <= 0:
-            resp = JSONResponse(
-                {"tier": tier, "reason": "limit", "remainingSec": 0}, status_code=402
-            )
+            resp = JSONResponse({"tier": tier, "reason": "limit", "remainingSec": 0}, status_code=402)
             if set_cookie:
                 auth.set_anon_cookie(resp, set_cookie)
             return resp
@@ -502,9 +501,7 @@ async def queue_status(queue_id: str, request: Request):
     if tracked:
         rem = await asyncio.to_thread(limiter.remaining, keys, tier)
         if rem is not None and rem <= 0:
-            resp = JSONResponse(
-                {"tier": tier, "reason": "limit", "remainingSec": 0}, status_code=402
-            )
+            resp = JSONResponse({"tier": tier, "reason": "limit", "remainingSec": 0}, status_code=402)
             if set_cookie:
                 auth.set_anon_cookie(resp, set_cookie)
             return resp
@@ -541,12 +538,14 @@ async def _finalize_grant(data, keys, tier, tracked, set_cookie):
         await asyncio.to_thread(limiter.begin, data["session_id"], keys, tier)
         remaining = await asyncio.to_thread(limiter.remaining, keys, tier)
 
-    data.update({
-        "tier": tier,
-        "limited": tracked,
-        "remainingSec": remaining,
-        "heartbeatSec": limiter.HEARTBEAT_SEC,
-    })
+    data.update(
+        {
+            "tier": tier,
+            "limited": tracked,
+            "remainingSec": remaining,
+            "heartbeatSec": limiter.HEARTBEAT_SEC,
+        }
+    )
     resp = JSONResponse(data)
     if set_cookie:
         auth.set_anon_cookie(resp, set_cookie)

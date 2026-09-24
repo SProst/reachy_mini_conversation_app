@@ -1,23 +1,21 @@
-"""NVIDIA MagpieTTS backend."""
+"""Streaming NVIDIA MagpieTTS backend powered by NeMo-Speech.cpp."""
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
-from math import gcd
 from threading import Event
 from time import perf_counter
 from typing import Any
 
 import numpy as np
-import torch
-from scipy.signal import resample_poly
 
 from speech_to_speech.baseHandler import BaseHandler
 from speech_to_speech.pipeline.cancel_scope import CancelScope
 from speech_to_speech.pipeline.handler_types import TTSIn, TTSOut
 from speech_to_speech.pipeline.messages import AUDIO_RESPONSE_DONE, EndOfResponse, TTSInput
 from speech_to_speech.pipeline.speculative_turns import SpeculativeTurnTracker
+from speech_to_speech.TTS.nemo_speech_cpp import NeMoSpeechTTSRuntime
 
 logger = logging.getLogger(__name__)
 
@@ -29,79 +27,100 @@ MAGPIE_VOICES = {
     "Sofia": 4,
 }
 MAGPIE_LANGUAGES = {
-    "ar": "ar-MSA",
-    "de": "de",
-    "en": "en",
-    "es": "es",
-    "fr": "fr",
-    "hi": "hi",
-    "it": "it",
-    "ja": "ja",
-    "ko": "ko",
-    "pt": "pt-BR",
-    "vi": "vi",
-    "zh": "zh",
+    "de": "de-DE",
+    "en": "en-US",
+    "es": "es-ES",
+    "fr": "fr-FR",
+    "hi": "hi-IN",
+    "it": "it-IT",
+    "vi": "vi-VN",
 }
 
 
 class MagpieTTSHandler(BaseHandler[TTSIn, TTSOut]):
-    """Generate 16 kHz speech with NVIDIA MagpieTTS."""
+    """Stream 16 kHz MagpieTTS speech through NeMo-Speech.cpp."""
+
+    runtime: NeMoSpeechTTSRuntime | None = None
 
     def setup(
         self,
         should_listen: Event,
-        model_name: str = "nvidia/magpie_tts_multilingual_357m",
-        checkpoint_filename: str = "magpie_tts_multilingual_357m.nemo",
-        revision: str = "452ef560f972c38d5fc16476259aac9456453547",
-        codec_model_name: str = "nvidia/nemo-nano-codec-22khz-1.89kbps-21.5fps",
+        library_path: str = "libnemo_speech_tts.so",
+        model_path: str = "",
+        codec_path: str = "",
+        tokenizer_path: str = "",
         device: str = "cuda",
         voice: str = "Aria",
-        language: str = "en",
-        apply_text_normalization: bool = False,
+        language: str = "en-US",
+        threads: int = 4,
+        codec_threads: int = 0,
+        chunk_frames: int = 3,
+        codec_queue_depth: int = 4,
+        codec_history_frames: int = -1,
+        codec_future_frames: int = 1,
+        window_ms: int = 0,
         use_cfg: bool = True,
+        use_kv_cache: bool = True,
+        use_stateful_codec: bool = True,
+        codec_cpu: bool = False,
+        flush_partial_chunk: bool = True,
+        verbose: bool = False,
         blocksize: int = 512,
         gen_kwargs: dict[str, Any] | None = None,
         cancel_scope: CancelScope | None = None,
         speculative_turns: SpeculativeTurnTracker | None = None,
     ) -> None:
-        from huggingface_hub import hf_hub_download
-
         self.should_listen = should_listen
         self.cancel_scope = cancel_scope
         self.speculative_turns = speculative_turns
-        self.device = device
         self.voice = self._normalize_voice(voice)
-        self.language = self._normalize_language(language, fallback="en")
-        self.apply_text_normalization = apply_text_normalization
-        self.use_cfg = use_cfg
+        self.language = self._normalize_language(language, fallback="en-US")
+        if blocksize <= 0:
+            raise ValueError("MagpieTTS blocksize must be positive")
         self.blocksize = blocksize
-        self.gen_kwargs = gen_kwargs or {}
+        if gen_kwargs:
+            logger.warning("NeMo-Speech.cpp MagpieTTS ignores unsupported generation options: %s", sorted(gen_kwargs))
 
-        logger.info("Downloading MagpieTTS checkpoint %s at %s", model_name, revision)
-        checkpoint_path = hf_hub_download(repo_id=model_name, filename=checkpoint_filename, revision=revision)
-        logger.info("Importing NVIDIA NeMo Speech for MagpieTTS")
-        from nemo.collections.tts.modules.magpietts_inference.utils import ModelLoadConfig, load_magpie_model
-
-        model_config = ModelLoadConfig(
-            nemo_file=checkpoint_path,
-            codecmodel_path=codec_model_name,
-            legacy_codebooks=False,
-            legacy_text_conditioning=False,
-            hparams_from_wandb=None,
+        logger.info("Loading MagpieTTS v2602 with NeMo-Speech.cpp on %s", device)
+        self.runtime = NeMoSpeechTTSRuntime(
+            library_path=library_path,
+            model_path=model_path,
+            codec_path=codec_path,
+            tokenizer_path=tokenizer_path,
+            device=device,
+            voice=self.voice,
+            language=self.language,
+            threads=threads,
+            codec_threads=codec_threads,
+            chunk_frames=chunk_frames,
+            codec_queue_depth=codec_queue_depth,
+            codec_history_frames=codec_history_frames,
+            codec_future_frames=codec_future_frames,
+            window_ms=window_ms,
+            use_cfg=use_cfg,
+            use_kv_cache=use_kv_cache,
+            use_stateful_codec=use_stateful_codec,
+            codec_cpu=codec_cpu,
+            flush_partial_chunk=flush_partial_chunk,
+            verbose=verbose,
         )
-        logger.info("Loading MagpieTTS model %s on %s", model_name, device)
-        self.model, _ = load_magpie_model(model_config)
-        self.model.eval().to(device)
+        logger.info(
+            "Loaded %s at %d Hz with voices: %s",
+            self.runtime.version,
+            self.runtime.sample_rate,
+            ", ".join(self.runtime.voices),
+        )
 
         warmup_started = perf_counter()
-        self.model.do_tts(
+        for _ in self.runtime.stream(
             "Hello.",
-            language=self.language,
-            apply_TN=False,
-            use_cfg=self.use_cfg,
-            speaker_index=MAGPIE_VOICES[self.voice],
-        )
-        logger.info("MagpieTTS warmup completed in %.3fs", perf_counter() - warmup_started)
+            self.language,
+            self.voice,
+            16000,
+            lambda: False,
+        ):
+            pass
+        logger.info("NeMo-Speech.cpp MagpieTTS warmup completed in %.3fs", perf_counter() - warmup_started)
 
     @staticmethod
     def _normalize_voice(voice: str) -> str:
@@ -116,7 +135,7 @@ class MagpieTTSHandler(BaseHandler[TTSIn, TTSOut]):
         if resolved is not None:
             return resolved
         fallback_base = fallback.strip().replace("_", "-").lower().split("-", maxsplit=1)[0]
-        return MAGPIE_LANGUAGES.get(fallback_base, "en")
+        return MAGPIE_LANGUAGES.get(fallback_base, "en-US")
 
     @staticmethod
     def _prepare_text(text: str) -> str:
@@ -143,29 +162,6 @@ class MagpieTTSHandler(BaseHandler[TTSIn, TTSOut]):
                 self.voice = normalized
         return self.voice
 
-    def _generate_audio(self, text: str, language: str, voice: str) -> np.ndarray:
-        started = perf_counter()
-        with torch.inference_mode():
-            waveform, waveform_length = self.model.do_tts(
-                text,
-                language=language,
-                apply_TN=self.apply_text_normalization,
-                use_cfg=self.use_cfg,
-                speaker_index=MAGPIE_VOICES[voice],
-                **self.gen_kwargs,
-            )
-        audio_length = int(waveform_length[0].item())
-        audio = waveform[0, :audio_length].detach().float().cpu().numpy()
-        elapsed = perf_counter() - started
-        duration = len(audio) / int(self.model.sample_rate)
-        logger.info(
-            "MagpieTTS generated %.3fs audio in %.3fs (RTF %.3f)",
-            duration,
-            elapsed,
-            elapsed / duration if duration else 0.0,
-        )
-        return audio
-
     def process(self, tts_input: TTSIn) -> Iterator[TTSOut]:
         if isinstance(tts_input, EndOfResponse):
             if self.speculative_turns and not self.speculative_turns.is_latest_after_reopen_grace(
@@ -187,23 +183,54 @@ class MagpieTTSHandler(BaseHandler[TTSIn, TTSOut]):
         if self.speculative_turns:
             self.speculative_turns.commit(tts_input.turn_id, tts_input.turn_revision)
 
+        runtime = self.runtime
+        if runtime is None:
+            raise RuntimeError("NeMo-Speech.cpp TTS runtime is not initialized")
         generation = self.cancel_scope.generation if self.cancel_scope else None
-        language = self._normalize_language(tts_input.language_code or self.language, fallback=self.language)
-        waveform = self._generate_audio(self._prepare_text(tts_input.text), language, self._resolve_voice(tts_input))
-        if generation is not None and self.cancel_scope and self.cancel_scope.is_stale(generation):
-            logger.info("MagpieTTS generation cancelled")
-            return
 
-        source_rate = int(self.model.sample_rate)
-        common_divisor = gcd(16000, source_rate)
-        waveform = resample_poly(
-            waveform,
-            up=16000 // common_divisor,
-            down=source_rate // common_divisor,
-        )
-        audio = (np.clip(waveform, -1.0, 1.0) * 32767).astype(np.int16)
-        for offset in range(0, len(audio), self.blocksize):
-            chunk = audio[offset : offset + self.blocksize]
-            if len(chunk) < self.blocksize:
-                chunk = np.pad(chunk, (0, self.blocksize - len(chunk)))
-            yield chunk
+        def cancelled() -> bool:
+            return self.stop_event.is_set() or (
+                generation is not None and self.cancel_scope is not None and self.cancel_scope.is_stale(generation)
+            )
+
+        language = self._normalize_language(tts_input.language_code or self.language, fallback=self.language)
+        pending = bytearray()
+        block_bytes = self.blocksize * np.dtype(np.int16).itemsize
+        for pcm in runtime.stream(
+            self._prepare_text(tts_input.text),
+            language,
+            self._resolve_voice(tts_input),
+            16000,
+            cancelled,
+        ):
+            if cancelled():
+                logger.info("NeMo-Speech.cpp MagpieTTS generation cancelled")
+                return
+            pending.extend(pcm)
+            while len(pending) >= block_bytes:
+                chunk = bytes(pending[:block_bytes])
+                del pending[:block_bytes]
+                yield np.frombuffer(chunk, dtype="<i2").astype(np.int16, copy=False)
+
+        if cancelled():
+            logger.info("NeMo-Speech.cpp MagpieTTS generation cancelled")
+            return
+        if pending:
+            pending.extend(b"\0" * (block_bytes - len(pending)))
+            yield np.frombuffer(bytes(pending), dtype="<i2").astype(np.int16, copy=False)
+
+        stats = runtime.last_stats
+        if stats is not None:
+            logger.info(
+                "NeMo-Speech.cpp MagpieTTS generated %.3fs audio in %.3fs (RTF %.3f, TTFA %.0fms, %d streamed chunks)",
+                stats.audio_s,
+                stats.elapsed_s,
+                stats.rtf,
+                stats.e2e_ttfa_ms,
+                stats.e2e_chunks,
+            )
+
+    def cleanup(self) -> None:
+        if self.runtime is not None:
+            self.runtime.close()
+            self.runtime = None

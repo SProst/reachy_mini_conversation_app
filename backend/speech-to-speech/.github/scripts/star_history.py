@@ -65,11 +65,7 @@ def fetch_star_dates(repo: str, token: str) -> list[datetime]:
         for edge in stargazers["edges"]:
             ts = edge.get("starredAt")
             if ts:
-                dates.append(
-                    datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(
-                        tzinfo=timezone.utc
-                    )
-                )
+                dates.append(datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc))
         page_info = stargazers["pageInfo"]
         if not page_info["hasNextPage"]:
             break
@@ -120,14 +116,9 @@ def render_svg(points: list[tuple[datetime, int]], repo: str) -> str:
     def y(v: float) -> float:
         return mt + ph - v / ymax * ph
 
-    line = " ".join(
-        f"{'M' if i == 0 else 'L'}{x(d.timestamp()):.1f},{y(c):.1f}"
-        for i, (d, c) in enumerate(points)
-    )
+    line = " ".join(f"{'M' if i == 0 else 'L'}{x(d.timestamp()):.1f},{y(c):.1f}" for i, (d, c) in enumerate(points))
     area = (
-        line
-        + f" L{x(points[-1][0].timestamp()):.1f},{y(0):.1f}"
-        + f" L{x(points[0][0].timestamp()):.1f},{y(0):.1f} Z"
+        line + f" L{x(points[-1][0].timestamp()):.1f},{y(0):.1f}" + f" L{x(points[0][0].timestamp()):.1f},{y(0):.1f} Z"
     )
 
     grid, ylabels = [], []
@@ -139,18 +130,14 @@ def render_svg(points: list[tuple[datetime, int]], repo: str) -> str:
             f'stroke="#8b949e" stroke-opacity="0.25" stroke-width="1"/>'
         )
         label = f"{v / 1000:.1f}k".replace(".0k", "k") if v >= 1000 else f"{int(v)}"
-        ylabels.append(
-            f'<text x="{ml - 10}" y="{yy + 4:.1f}" text-anchor="end" '
-            f'class="lbl">{label}</text>'
-        )
+        ylabels.append(f'<text x="{ml - 10}" y="{yy + 4:.1f}" text-anchor="end" class="lbl">{label}</text>')
 
     xlabels = []
     for i in range(6):
         ts = t0 + tspan * i / 5
         d = datetime.fromtimestamp(ts, tz=timezone.utc)
         xlabels.append(
-            f'<text x="{x(ts):.1f}" y="{mt + ph + 22}" text-anchor="middle" '
-            f'class="lbl">{d.strftime("%b %Y")}</text>'
+            f'<text x="{x(ts):.1f}" y="{mt + ph + 22}" text-anchor="middle" class="lbl">{d.strftime("%b %Y")}</text>'
         )
 
     total = points[-1][1]
