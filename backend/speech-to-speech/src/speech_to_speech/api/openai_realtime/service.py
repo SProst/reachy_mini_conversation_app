@@ -53,6 +53,9 @@ from speech_to_speech.api.openai_realtime.handlers import (
 from speech_to_speech.api.openai_realtime.input_state import InputItemState
 from speech_to_speech.api.openai_realtime.runtime_config import RuntimeConfig
 from speech_to_speech.LLM.chat import Chat, make_user_message
+from speech_to_speech.perception.ingress import AudioIngress
+from speech_to_speech.perception.scene import PerceptionEvent
+from speech_to_speech.perception.worker import PerceptionWorker
 from speech_to_speech.pipeline.events import (
     AssistantOutputEvent,
     AssistantResponseDoneEvent,
@@ -106,6 +109,7 @@ ClientEvent = Union[
 ]
 
 ServerEvent = Union[
+    PerceptionEvent,
     SessionCreatedEvent,
     SessionUpdatedEvent,
     RealtimeErrorEvent,
@@ -190,6 +194,7 @@ class ConnState(BaseModel):
     closed_response_keys: dict[str, None] = Field(default_factory=dict)
     audio_buffer_has_data: bool = False
     audio_remainder: bytes = b""
+    audio_ingress: AudioIngress = Field(default_factory=AudioIngress)
     current_response_id: Optional[str] = None
     current_response_key: Optional[str] = None
     response_failed: bool = False
@@ -202,6 +207,8 @@ class ConnState(BaseModel):
     input_item_by_turn_revision: dict[tuple[str, int | None], str] = Field(default_factory=dict)
     input_items: dict[str, InputItemState] = Field(default_factory=dict)
     input_audio_duration_s: float = 0.0
+    perception_enabled: bool = False
+    perception_turns: dict[str, tuple[int, int]] = Field(default_factory=dict)
     last_item_id: Optional[str] = None
     current_response_params: RealtimeResponseCreateParams | None = None
     pending_assistant_item_id: Optional[str] = None
@@ -306,6 +313,7 @@ class RealtimeService:
         self._default_instructions = default_instructions
         self._conns: dict[str, ConnState] = {}
         self.total_usage = GlobalUsageMetrics()
+        self.perception = PerceptionWorker()
 
         self.audio = AudioHandler(self)
         self.session = SessionHandler(self)
@@ -326,7 +334,7 @@ class RealtimeService:
 
     # ── Connection lifecycle ─────────────────────
 
-    def register(self) -> str:
+    def register(self, *, perception: bool = False) -> str:
         """Register a new connection and return its session_id."""
         if self.speculative_turns:
             self.speculative_turns.reset()
@@ -339,13 +347,18 @@ class RealtimeService:
                 ),
             )
         )
+        state.perception_enabled = perception
         self._conns[state.session_id] = state
+        if perception:
+            self.perception.begin(state.session_id)
         self.total_usage.connections += 1
         return state.session_id
 
     def unregister(self, conn_id: str) -> None:
         st = self._conns.pop(conn_id, None)
         if st is not None:
+            if st.perception_enabled:
+                self.perception.end()
             # Suppress any in-flight compaction splice so a daemon worker can't
             # mutate a Chat tied to a closed session, and don't make further
             # billable LLM calls on its behalf once the splice is suppressed.
@@ -549,6 +562,26 @@ class RealtimeService:
             )
             return []
 
+        state = self._state(conn_id)
+        key = f"{getattr(event, 'turn_id', None)}:{getattr(event, 'turn_revision', None)}"
+        if state.perception_enabled:
+            if isinstance(event, SpeechStartedEvent):
+                start = event.start_sample if event.start_sample is not None else event.audio_start_ms * 16
+                previous = [
+                    value[0] for name, value in state.perception_turns.items() if name.startswith(f"{event.turn_id}:")
+                ]
+                state.perception_turns[key] = (min([start, *previous]), start)
+            elif isinstance(event, SpeechStoppedEvent):
+                end = event.end_sample if event.end_sample is not None else event.audio_end_ms * 16
+                start, _ = state.perception_turns.get(key, (end, 0))
+                state.perception_turns[key] = (start, end)
+            if isinstance(event, (SpeechStartedEvent, SpeechStoppedEvent, TranscriptionCompletedEvent)):
+                interval = state.perception_turns.get(key)
+                if interval is not None:
+                    event.start_sample, event.end_sample = interval
+            while len(state.perception_turns) > 128:
+                state.perception_turns.pop(next(iter(state.perception_turns)))
+
         self._observe_turn_event(event)
         if isinstance(event, AssistantOutputEvent):
             return self.response.on_assistant_output(
@@ -562,7 +595,20 @@ class RealtimeService:
         if handler is None:
             logger.debug("Unhandled pipeline event type: %s", type(event).__name__)
             return []
-        return handler(conn_id, event)
+        output = handler(conn_id, event)
+        if state.perception_enabled and isinstance(event, TranscriptionCompletedEvent):
+            for wire_event in output:
+                if wire_event.type == "conversation.item.input_audio_transcription.completed":
+                    self.perception.turn(
+                        {
+                            "item_id": wire_event.item_id,
+                            "turn_id": event.turn_id,
+                            "turn_revision": event.turn_revision,
+                            "start_sample": event.start_sample or 0,
+                            "end_sample": event.end_sample or 0,
+                        }
+                    )
+        return output
 
     def _is_stale_turn_event(self, event: PipelineEvent, *, wait_for_pending_reopen: bool = True) -> bool | None:
         if self.speculative_turns is None:

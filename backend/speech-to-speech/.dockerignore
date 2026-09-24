@@ -15,3 +15,8 @@ Dockerfile
 docker-compose.yml
 .dockerignore
 .gitignore
+
+.diar-runtime
+.diar-install
+.diar-models
+perception-results

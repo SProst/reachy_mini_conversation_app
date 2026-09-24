@@ -34,6 +34,8 @@ class PipelineEvent(BaseModel):
 
 
 class SpeechStartedEvent(PipelineEvent):
+    start_sample: int | None = None
+    end_sample: int | None = None
     type: Literal["speech_started"] = "speech_started"
     audio_start_ms: int = 0
     turn_id: str | None = None
@@ -43,6 +45,8 @@ class SpeechStartedEvent(PipelineEvent):
 
 
 class SpeechStoppedEvent(PipelineEvent):
+    start_sample: int | None = None
+    end_sample: int | None = None
     type: Literal["speech_stopped"] = "speech_stopped"
     duration_s: float = 0.0
     audio_end_ms: int = 0
@@ -67,6 +71,8 @@ class PartialTranscriptionEvent(PipelineEvent):
 
 
 class TranscriptionCompletedEvent(PipelineEvent):
+    start_sample: int | None = None
+    end_sample: int | None = None
     type: Literal["transcription_completed"] = "transcription_completed"
     transcript: str
     language_code: Optional[str] = None

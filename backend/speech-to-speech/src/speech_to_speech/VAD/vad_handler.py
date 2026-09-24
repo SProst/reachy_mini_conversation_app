@@ -546,13 +546,14 @@ class VADHandler(BaseHandler[VADIn, VADOut]):
             audio_chunk, runtime_config = audio_chunk
         self._apply_runtime_turn_detection(runtime_config)
 
+        # Keep VAD timestamps on the ingress clock, including intentionally muted input.
+        audio_int16 = np.frombuffer(audio_chunk, dtype=np.int16)
+        self._total_samples += len(audio_int16)
         if not self.should_listen.is_set():
             return
 
         # Normal listening mode
         self._log_chunks += 1
-        audio_int16 = np.frombuffer(audio_chunk, dtype=np.int16)
-        self._total_samples += len(audio_int16)
         audio_float32 = int2float(audio_int16)
 
         vad_output = self.iterator(torch.from_numpy(audio_float32))
@@ -587,6 +588,7 @@ class VADHandler(BaseHandler[VADIn, VADOut]):
                     self.text_output_queue.put(
                         SpeechStartedEvent(
                             audio_start_ms=effective_start_ms,
+                            start_sample=effective_start_ms * self.sample_rate // 1000,
                             turn_id=turn_id,
                             turn_revision=turn_revision,
                             reopened=reopened,
@@ -659,6 +661,7 @@ class VADHandler(BaseHandler[VADIn, VADOut]):
                     self.text_output_queue.put(
                         SpeechStoppedEvent(
                             audio_end_ms=self._audio_ms,
+                            end_sample=self._total_samples,
                             turn_id=turn_id,
                             turn_revision=turn_revision,
                         )
@@ -709,6 +712,7 @@ class VADHandler(BaseHandler[VADIn, VADOut]):
                     self.text_output_queue.put(
                         SpeechStoppedEvent(
                             audio_end_ms=self._audio_ms,
+                            end_sample=self._total_samples,
                             turn_id=turn_id,
                             turn_revision=turn_revision,
                         )
@@ -729,6 +733,7 @@ class VADHandler(BaseHandler[VADIn, VADOut]):
                         self.text_output_queue.put(
                             SpeechStartedEvent(
                                 audio_start_ms=start_ms,
+                                start_sample=start_ms * self.sample_rate // 1000,
                                 turn_id=turn_id,
                                 turn_revision=turn_revision,
                                 reopened=reopened,
@@ -756,6 +761,7 @@ class VADHandler(BaseHandler[VADIn, VADOut]):
                         SpeechStoppedEvent(
                             duration_s=combined_duration_s,
                             audio_end_ms=end_ms,
+                            end_sample=end_ms * self.sample_rate // 1000,
                             turn_id=turn_id,
                             turn_revision=turn_revision,
                         )

@@ -443,7 +443,16 @@ class TestClientEventDispatch:
                 output_queue.put(_pcm_bytes(256))
                 output_queue.put(AssistantOutputEvent(text="stale"))
                 ws.send_json({"type": "response.cancel"})
-                assert ws.receive_json()["type"] == "response.done"
+                # Audio already sent before cancellation can precede its acknowledgement.
+                # Verify the cancellation boundary, then assert the queues were drained.
+                for _ in range(20):
+                    event = ws.receive_json()
+                    if event["type"] == "response.done":
+                        assert event["response"]["status"] == "cancelled"
+                        break
+                    assert event["type"].startswith("response.")
+                else:
+                    pytest.fail("Cancellation did not produce response.done")
                 time.sleep(0.1)
                 assert output_queue.empty()
                 assert text_output_queue.empty()

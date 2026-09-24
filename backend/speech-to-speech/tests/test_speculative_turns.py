@@ -508,7 +508,8 @@ def test_vad_complete_smart_turn_selects_shorter_speculative_grace():
     assert outputs[0].processing_delay_s == 0.0
     grace = handler.speculative_turns._reopen_grace["turn_1"]
     assert grace.revision == 0
-    assert 0.6 < grace.deadline - time.monotonic() <= 0.8
+    # Windows clock subtraction may round 0.8 upward by a few ulps.
+    assert 0.6 < grace.deadline - time.monotonic() <= 0.8 + 1e-9
 
 
 def test_vad_incomplete_smart_turn_selects_longer_speculative_grace():

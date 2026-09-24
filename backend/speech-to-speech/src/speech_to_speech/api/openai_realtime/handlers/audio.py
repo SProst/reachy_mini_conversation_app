@@ -129,7 +129,12 @@ class AudioHandler(RealtimeBaseHandler):
         one place regardless of how audio arrives.
         """
         st = self._state(conn_id)
-        pcm_bytes = resample(pcm_bytes, src_rate, PIPELINE_SAMPLE_RATE)
+        if st.perception_enabled:
+            if st.audio_ingress.rate is not None and st.audio_ingress.rate != src_rate:
+                self._service.perception.fail("input_rate_changed")
+            pcm_bytes = st.audio_ingress.push(pcm_bytes, src_rate)
+        else:
+            pcm_bytes = resample(pcm_bytes, src_rate, PIPELINE_SAMPLE_RATE)
 
         pcm_bytes = st.audio_remainder + pcm_bytes
 
@@ -138,6 +143,8 @@ class AudioHandler(RealtimeBaseHandler):
             chunk = pcm_bytes[i : i + CHUNK_SIZE_BYTES]
             if len(chunk) == CHUNK_SIZE_BYTES:
                 chunks.append(chunk)
+                if st.perception_enabled:
+                    self._service.perception.audio(chunk)
             else:
                 st.audio_remainder = chunk
                 break

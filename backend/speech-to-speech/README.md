@@ -721,3 +721,154 @@ If you use this pipeline, please also cite the component models you run. The def
 ```
 
 Citations for optional backends such as Kokoro, Pocket TTS, ChatTTS, Whisper variants, Paraformer, and MMS live in the respective [component READMEs](./src/speech_to_speech).
+
+## Optional scene speaker perception
+
+The backend can run NVIDIA Nemotron-3-Diarization alongside Nemotron 3.5 ASR and
+Magpie TTS. It tracks anonymous labels only within a continuous connection; it
+does not enroll identities, track camera subjects, or separately transcribe
+simultaneous voices. Diarization is disabled by default (`REACHY_DIARIZATION=0`).
+Automatic gaze is an independent Reachy Presence client setting, also disabled.
+
+The new `soxr` dependency preserves streaming resampler state for opted-in
+connections. Shared mono PCM16 at 16 kHz goes to both VAD and diarization before
+VAD filtering, including silence and muted conversational input. Ordinary clients
+keep their existing audio path and receive no extension events. Server sample
+intervals are half-open and start at zero for each session. Input rate changes
+invalidate perception for that session; reconnect to start a new epoch.
+
+### Native runtime and deployment
+
+The standalone C ABI is `nemo_speech_asr_c`, built from revision
+`97a15afa5caa9bce5baaa86c1184103877af4101`. It is a separate installation and
+inference subprocess, preserving Magpie's existing runtime pin
+`4f9676226f667d14608487df744f375db87127f8`. Do not replace the conversational
+server with the native runtime's different realtime API.
+
+The Q8 file is `Nemotron-3-Diarization.q8_0.gguf`, model revision
+`f667ed73aee57d40cc39428eb768b4fd87a0a29e`, SHA256
+`08456d9e22cd9a323c0364d98375f3746d6e68507ebb705cd46438c534c7a3a1`.
+The wrapper verifies this hash before loading. Its 107,012,128 bytes are artifact
+size, not runtime memory. Initial geometry is the published 320 ms configuration
+(chunk 3, right context 1, FIFO/cache 264, update 222 encoder frames), with native
+segmentation defaults and eight speaker activity outputs at 10 ms cadence.
+
+Native Windows, from this backend directory, with VS 2022 Build Tools installed:
+
+```powershell
+uv sync --extra webrtc
+uv pip install cmake psutil
+./scripts/Build-Diarization.ps1 -DownloadModel
+./scripts/Start-ReachySpeech.ps1 -Diarization `
+  -Library .diar-install/bin/nemo_speech_asr_c.dll `
+  -Model .diar-models/Nemotron-3-Diarization.q8_0.gguf -Gpu -1 `
+  -BackendArgs @('--host','127.0.0.1','--port','7860','--llm_backend','responses-api')
+```
+
+Keep existing provider configuration and Magpie library/model environment settings.
+The build helper is a verified CPU build; it changes no machine PATH or CUDA
+installation. It refuses mismatched existing source revisions. For native CUDA,
+use the pinned runtime's official Windows CUDA build driver in a separate build
+and install directory, then supply its C ABI DLL and `-Gpu 0`; that path has not
+yet been validated here. Run the launcher in a separate shell for long sessions.
+
+The existing Linux CUDA Dockerfile includes a separate diarization build stage,
+checksum-verified model, and private runtime search paths. The conversational
+entrypoint, authentication boundary, ASR, and TTS remain in place. Enable
+`REACHY_DIARIZATION=1` in the deployment environment and keep the existing HF token
+secret/gateway. The backend itself does not authenticate clients: an HF Docker
+Space must be private or sit behind the existing authenticated allocation gateway;
+a public Space alone is not that gateway. Cloud load balancing must keep each
+WebSocket/WebRTC session on its assigned worker. No hardware size is selected
+until concurrent-session latency and memory are measured. CUDA architecture defaults
+to 89; set Docker build argument `DIAR_CUDA_ARCHITECTURES` for the target GPU.
+
+Each occupied pipeline unit gets an independent native stream and subprocess. The
+model loads once and is reused for subsequent clients on that worker, with a fresh
+stream per epoch. Audio submissions are bounded to 64 packets of 320 ms (20.48 s);
+output is bounded to 64 events. Overflow, invalid output, startup errors, worker
+exit, or lack of processing progress invalidates perception and emits unavailable
+status while the ordinary conversation continues. No raw audio is retained by this
+feature after bounded in-memory processing. Pending transcript attribution expires
+to `unknown` after five seconds without sufficient diarization output.
+
+### Negotiated protocol
+
+Opt in with `GET /v1/realtime?perception=1` for WebSocket or
+`POST /v1/realtime/calls?perception=1` for WebRTC SDP creation. Extension events
+follow standard `session.created`, over the same ordered event transport. WebRTC
+waits for the data channel to open before draining perception events.
+
+Every event includes `epoch` (the session ID), increasing `revision`, `sample_rate`
+(16000), and `start_sample`/`end_sample`. A reconnect creates a new epoch; clients
+must clear all speaker identities and timing calibration. Ignore older revisions
+and foreign epochs. Failure invalidates previous identity and directional evidence.
+
+- `reachy.perception.status`: `status` is `loading`, `ready`, or `unavailable`;
+  unavailable events include `reason`. Status intervals describe progress, not speech.
+- `reachy.speaker.activity`: `speakers` contains eight `{speaker, activity,
+  active_fraction}` entries. Labels are `speaker_1` through `speaker_8`. `activity`
+  is mean model output, not calibrated identity confidence. `overlap` reports any
+  frame with two outputs at least 0.5. `single_speaker` is present only when every
+  frame in this interval has exactly the same sole active speaker. Silence or
+  alternating speakers within a batch is not stable gaze evidence.
+- `reachy.transcript.speaker`: includes the transcript `item_id`, internal `turn_id`
+  and `turn_revision`, audio interval, `attribution` (`single`, `mixed`, `unknown`),
+  and optional `speaker`. One speaker must cover at least 80% of detected speech,
+  with overlap no more than 10%; silence is excluded using the segmentation union.
+  There is no word-level attribution. A later revision for the same item replaces
+  its prior attribution if native segmentation changes. Retention is bounded to
+  the most recent 128 items and 20 minutes of segment evidence.
+
+### Validation and measurements
+
+Replay a consented, labeled mono PCM16/16 kHz WAV (the harness writes metrics only):
+
+```powershell
+$env:PYTHONPATH = "$PWD/src"
+.venv/Scripts/python scripts/replay_perception.py `
+  --library .diar-install/bin/nemo_speech_asr_c.dll `
+  --model .diar-models/Nemotron-3-Diarization.q8_0.gguf `
+  --wav scene.wav --labels turns.json --output perception-results/scene.json
+```
+
+Install `psutil` for replay measurements. Labels are a JSON array of
+`{start_sample, end_sample, expected_speaker}`; speaker numbers use first-arrival
+order, and overlap uses `"mixed"`. The harness measures native push/snapshot time,
+process RSS, and clear/overlap turn accuracy separately. Network, ASR overhead,
+GPU allocator memory, speaker confusion, false switches, and gaze latency are
+explicitly unmeasured fields; process RSS includes the replay input.
+
+Native Windows verification used the pinned Q8 model, CPU-only runtime, and 60 s
+of synthetic silence: load 0.113 s, median push/snapshot 288 ms, p95 731 ms,
+processing real-time factor 1.012, peak process RSS 263,647,232 bytes. This is an
+ABI/streaming smoke measurement, not a conversation accuracy or capacity result.
+Real native-worker tests cover model reuse with stream reset and two-client isolation.
+The new protocol tests cover packet boundaries, resampling, timestamps, revisions,
+reconnects, queue overflow, failure recovery, and WebSocket/WebRTC negotiation.
+Pillow is present in the isolated validation environment and Magpie tests pass.
+The baseline cancellation-order test failure was reproduced on untouched `e9a32ce`;
+its test now allows audio already sent before cancellation, while checking the
+cancelled response and drained queues. A Windows floating-point test boundary was
+also corrected. Full backend validation: 1,305 passed, eight optional tests skipped;
+the two configured native-worker tests passed separately. Ruff and the perception
+package's mypy checks pass. Windows build and launcher help checks pass.
+
+Still required before enabling gaze: publish the actual Mac media bridge; attach
+its calibrated capture/DoA/head-pose timeline and existing Rust motion safety policy;
+replay simulated motion; then supervise physical robot trials. Evaluate two to four
+speakers first, then eight, over at least 30 minutes: alternating turns, silence and
+return, similar voices, overlap, changing positions, robot playback, head movement,
+and network jitter. Measure confusion, clear-turn attribution, false switches,
+time to correct gaze, added conversational latency, CPU/GPU memory, and session
+capacity. Targets remain 95% correct clear-turn attribution, no unsafe or stale-data
+movement, and correct gaze within 1.5 s at p95 under the measured deployment
+conditions. None of these live acceptance targets is established by synthetic tests.
+Linux Docker execution is pending a running Docker engine; no deployment or robot
+motion was performed. The separate app's pre-existing shutdown hang was resolved by clearing the closed
+session reference before cancelling its sender; all 320 app tests now pass.
+
+Primary references: [model and artifacts](https://huggingface.co/nvidia/Nemotron-3-Diarization),
+[ASR integration guide](https://huggingface.co/nvidia/Nemotron-3-Diarization/blob/main/ASR_INTEGRATION_GUIDE.md),
+[pinned C ABI](https://github.com/NVIDIA/NeMo-Speech.cpp/blob/97a15afa5caa9bce5baaa86c1184103877af4101/include/nemo_speech/diar.h),
+[official Reachy DoA transform](https://github.com/pollen-robotics/reachy_mini/blob/main/examples/sound_doa.py).

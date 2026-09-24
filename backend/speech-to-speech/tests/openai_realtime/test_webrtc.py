@@ -570,7 +570,9 @@ class TestWebRTCLoopback:
             await server_pc.close()
             await client_pc.close()
 
-    async def test_handshake_events_and_multi_output_audio_roundtrip(self, server_env):
+    @pytest.mark.parametrize("perception", [False, True])
+    async def test_handshake_events_and_multi_output_audio_roundtrip(self, server_env, monkeypatch, perception):
+        monkeypatch.setenv("REACHY_DIARIZATION", "0")
         pc = RTCPeerConnection()
         try:
             dc = pc.createDataChannel("oai-events")
@@ -598,7 +600,7 @@ class TestWebRTCLoopback:
 
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
-                    f"http://127.0.0.1:{server_env.port}/v1/realtime/calls",
+                    f"http://127.0.0.1:{server_env.port}/v1/realtime/calls" + ("?perception=1" if perception else ""),
                     content=pc.localDescription.sdp,
                     headers={"Content-Type": "application/sdp"},
                     timeout=10.0,
@@ -690,6 +692,12 @@ class TestWebRTCLoopback:
 
             await asyncio.wait_for(track_ready.wait(), timeout=10.0)
             assert received_frames[0].sample_rate == WEBRTC_SAMPLE_RATE
+
+            extension_events = [event for event in inbox.events if event["type"].startswith("reachy.")]
+            assert bool(extension_events) == perception
+            if perception:
+                assert extension_events[0]["type"] == "reachy.perception.status"
+                assert extension_events[0]["reason"] == "disabled"
 
             # Hanging up: closing the data channel signals the server (an
             # SCTP reset, unlike a bare pc.close() which the server only

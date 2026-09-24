@@ -33,6 +33,7 @@ class SessionState(BaseModel):
 
     transport: Optional[SessionTransport] = None
     session_id: str = ""
+    perception_ready: bool = False
     pending_output_item: Any = None
     # Response-keyed side-channel events can be generated before a hidden
     # prefetch is claimed. Keep them ordered and private without letting one

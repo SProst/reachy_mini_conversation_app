@@ -232,3 +232,9 @@ uv.lock
 
 # JavaScript dependencies
 node_modules/
+
+# Local diarization builds, models and replay output
+.diar-runtime/
+.diar-install/
+.diar-models/
+perception-results/

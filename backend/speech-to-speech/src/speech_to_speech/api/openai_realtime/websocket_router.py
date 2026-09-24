@@ -513,6 +513,7 @@ def create_app(
             except asyncio.CancelledError:
                 pass
         for unit in pool:
+            unit.service.perception.shutdown()
             sess = unit.session
             if sess is not None and sess.transport is not None:
                 try:
@@ -566,7 +567,7 @@ def create_app(
         # releases the unit, even if session setup fails.
         session_id = ""
         try:
-            session_id = unit.service.register()
+            session_id = unit.service.register(perception=ws.query_params.get("perception") == "1")
             unit.session.session_id = session_id
             logger.info(f"Client connected to pipeline {unit.index} (session {session_id})")
 
@@ -575,6 +576,7 @@ def create_app(
             _clean_unit(unit)
 
             await send_ws_event(ws, unit.service.build_session_created(session_id))
+            unit.session.perception_ready = True
 
             while not stop_event.is_set():
                 try:
@@ -700,7 +702,7 @@ def create_app(
 
         pipeline_log_ctx.set(unit.index)
         try:
-            session_id = unit.service.register()
+            session_id = unit.service.register(perception=request.query_params.get("perception") == "1")
             assert unit.session is not None
             unit.session.session_id = session_id
             logger.info(f"WebRTC client claiming pipeline {unit.index} (session {session_id})")
@@ -742,6 +744,8 @@ def create_app(
         async def _on_open() -> None:
             assert session is not None  # callbacks only fire after setup()
             await session.send_events([unit.service.build_session_created(session_id)])
+            if unit.session is not None and unit.session.session_id == session_id:
+                unit.session.perception_ready = True
             logger.info(f"WebRTC session.created sent (session {session_id})")
 
         # Any failure between the claim above and a successful negotiate()
@@ -820,6 +824,18 @@ def create_app(
                 session = unit.session
                 transport = session.transport if session is not None else None
                 session_id = session.session_id if session is not None else None
+
+                if (
+                    session is not None
+                    and session.perception_ready
+                    and transport is not None
+                    and session_id
+                    and session_id in unit.service._conns
+                ):
+                    if unit.service._state(session_id).perception_enabled:
+                        perception_events = unit.service.perception.poll()
+                        if perception_events:
+                            await transport.send_events(perception_events)
 
                 # Text events first (speech_started cancels active response).
                 try:
