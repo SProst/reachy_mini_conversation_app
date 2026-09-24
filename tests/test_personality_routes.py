@@ -63,13 +63,13 @@ def test_new_personality_inherits_packaged_default_tools(
     profile = read_profile_from_directory("guide", tmp_path / "user_personalities" / "guide")
     assert profile.instructions == "Be a concise guide."
     assert profile.greeting == "Hello there."
-    assert profile.voice == "Aiden"
+    assert profile.voice == "Aria"
     assert profile.default_tools == read_packaged_default_profile().default_tools
     loaded = _rpc_call(_client(), "personalities.load", {"name": "user_personalities/guide"})["result"]
     assert {field: loaded[field] for field in ("instructions", "greeting", "voice")} == {
         "instructions": "Be a concise guide.",
         "greeting": "Hello there.",
-        "voice": "Aiden",
+        "voice": "Aria",
     }
     assert loaded["enabled_tools"] == list(profile.default_tools)
 
@@ -251,7 +251,7 @@ def test_applying_default_persists_runtime_none(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(config, "REACHY_MINI_CUSTOM_PROFILE", None)
     app = FastAPI()
     handler = MagicMock()
-    handler.get_current_voice.return_value = "Aiden"
+    handler.get_current_voice.return_value = "Aria"
     persist_personality = MagicMock()
     rpc = JsonRpcServer()
     ops = build_personality_ops(
@@ -265,7 +265,7 @@ def test_applying_default_persists_runtime_none(monkeypatch: pytest.MonkeyPatch)
     response = _rpc_call(TestClient(app), "personalities.apply", {"name": "default", "persist": True})
 
     assert response["result"]["startup"] == "default"
-    persist_personality.assert_called_once_with(None, "Aiden")
+    persist_personality.assert_called_once_with(None, "Aria")
 
 
 def test_force_reloads_active_personality(monkeypatch: pytest.MonkeyPatch) -> None:

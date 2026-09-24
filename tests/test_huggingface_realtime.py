@@ -143,7 +143,7 @@ def _fake_allocator(
 async def test_partial_transcription_uses_latest_snapshot(monkeypatch: Any) -> None:
     """Partial transcription snapshots should replace older snapshots for the same item."""
     monkeypatch.setattr(hf_mod, "get_session_instructions", lambda _instance_path=None: "test")
-    monkeypatch.setattr(hf_mod, "get_session_voice", lambda default=HF_DEFAULT_VOICE: "Aiden")
+    monkeypatch.setattr(hf_mod, "get_session_voice", lambda default=HF_DEFAULT_VOICE: "Aria")
     monkeypatch.setattr(hf_mod, "get_tool_specs", lambda: [])
 
     handler = HuggingFaceRealtimeHandler(ToolDependencies(reachy_mini=MagicMock(), movement_manager=MagicMock()))
@@ -188,7 +188,7 @@ async def test_emit_skips_idle_signal_while_response_active(monkeypatch: Any) ->
 async def test_parallel_tool_calls_trigger_single_response(monkeypatch: Any) -> None:
     """Parallel tool calls in one turn should yield one response, not one per completed tool."""
     monkeypatch.setattr(hf_mod, "get_session_instructions", lambda _instance_path=None: "test")
-    monkeypatch.setattr(hf_mod, "get_session_voice", lambda default=HF_DEFAULT_VOICE: "Aiden")
+    monkeypatch.setattr(hf_mod, "get_session_voice", lambda default=HF_DEFAULT_VOICE: "Aria")
     monkeypatch.setattr(hf_mod, "get_tool_specs", lambda: [])
 
     handler = HuggingFaceRealtimeHandler(ToolDependencies(reachy_mini=MagicMock(), movement_manager=MagicMock()))
@@ -220,10 +220,10 @@ def test_handler_uses_hf_startup_voice_at_startup(monkeypatch: Any) -> None:
     """Hugging Face startup should restore persisted HF voices."""
     handler = HuggingFaceRealtimeHandler(
         ToolDependencies(reachy_mini=MagicMock(), movement_manager=MagicMock()),
-        startup_voice="Aiden",
+        startup_voice="Aria",
     )
 
-    assert handler.get_current_voice() == "Aiden"
+    assert handler.get_current_voice() == "Aria"
 
 
 def test_handler_ignores_unsupported_hf_profile_voice(monkeypatch: Any) -> None:
@@ -239,11 +239,11 @@ def test_handler_ignores_unsupported_hf_profile_voice(monkeypatch: Any) -> None:
 
 def test_handler_normalizes_hf_voice_case(monkeypatch: Any) -> None:
     """Lowercase Hugging Face speaker names should resolve to the curated UI value."""
-    monkeypatch.setattr(hf_mod, "get_session_voice", lambda default=HF_DEFAULT_VOICE: "serena")
+    monkeypatch.setattr(hf_mod, "get_session_voice", lambda default=HF_DEFAULT_VOICE: "sofia")
 
     handler = HuggingFaceRealtimeHandler(ToolDependencies(reachy_mini=MagicMock(), movement_manager=MagicMock()))
 
-    assert handler.get_current_voice() == "Serena"
+    assert handler.get_current_voice() == "Sofia"
 
 
 @pytest.mark.asyncio
@@ -425,9 +425,9 @@ async def test_build_realtime_client_deployed_resolves_hf_token(
 
 @pytest.mark.asyncio
 async def test_apply_personality_uses_selected_voice_for_lb_allocated_sessions(monkeypatch: Any) -> None:
-    """Live personality updates should honor the selected Qwen CustomVoice speaker."""
+    """Live personality updates should honor the selected Magpie speaker."""
     monkeypatch.setattr(hf_mod, "get_session_instructions", lambda _instance_path=None: "new instructions")
-    monkeypatch.setattr(hf_mod, "get_session_voice", lambda default=HF_DEFAULT_VOICE: "Serena")
+    monkeypatch.setattr(hf_mod, "get_session_voice", lambda default=HF_DEFAULT_VOICE: "Sofia")
     monkeypatch.setattr(config, "HF_REALTIME_SESSION_URL", "https://lb.example.test/session")
 
     captured_update: dict[str, Any] = {}
@@ -448,7 +448,7 @@ async def test_apply_personality_uses_selected_voice_for_lb_allocated_sessions(m
     assert "restarted realtime session" in result.lower()
     session = captured_update["session"]
     assert session["instructions"] == "new instructions"
-    assert session["audio"]["output"]["voice"] == "Serena"
+    assert session["audio"]["output"]["voice"] == "Sofia"
 
 
 @pytest.mark.asyncio
@@ -493,10 +493,10 @@ async def test_change_voice_updates_live_hf_session_without_restart(monkeypatch:
     restart = AsyncMock(return_value=None)
     monkeypatch.setattr(handler, "_restart_session", restart)
 
-    result = await handler.change_voice("Serena")
+    result = await handler.change_voice("Sofia")
 
-    assert result == "Voice changed to Serena."
-    assert handler.get_current_voice() == "Serena"
+    assert result == "Voice changed to Sofia."
+    assert handler.get_current_voice() == "Sofia"
     restart.assert_not_awaited()
     session = captured_update["session"]
-    assert session["audio"]["output"]["voice"] == "Serena"
+    assert session["audio"]["output"]["voice"] == "Sofia"

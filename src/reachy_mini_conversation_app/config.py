@@ -47,17 +47,13 @@ DEFAULT_PROFILES_DIRECTORY = _resolve_default_profiles_directory()
 USER_PERSONALITIES_DIRNAME = "user_personalities"
 TERMINAL_USER_PERSONALITIES_DIRECTORY = Path("external_content") / USER_PERSONALITIES_DIRNAME
 
-# Qwen3-TTS CustomVoice speaker catalog from the deployed Hugging Face backend.
+# NVIDIA MagpieTTS baked speaker catalog from the deployed Hugging Face backend.
 HF_AVAILABLE_VOICES: list[str] = [
-    "Aiden",
-    "Ryan",
-    "Dylan",
-    "Eric",
-    "Ono_Anna",
-    "Serena",
-    "Sohee",
-    "Uncle_Fu",
-    "Vivian",
+    "Aria",
+    "Jason",
+    "John",
+    "Leo",
+    "Sofia",
 ]
 
 HF_BACKEND = "huggingface"
@@ -79,7 +75,7 @@ class HFBackendDefaults:
     # Users who need a custom target should use HF_REALTIME_CONNECTION_MODE=local
     # with HF_REALTIME_WS_URL.
     session_url: str = HF_REALTIME_SESSION_PROXY_URL
-    voice: str = "Aiden"
+    voice: str = "Aria"
     direct_port: int = 8765
 
 

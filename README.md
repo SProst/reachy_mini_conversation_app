@@ -244,7 +244,7 @@ Every profile directory contains one strict schema-version-1 `profile.md`. TOML 
 ```markdown
 +++
 schema_version = 1
-voice = "Aiden"
+voice = "Aria"
 greeting = "Greet me warmly in one sentence, in character, and vary the wording each time."
 hidden = false
 default_tools = [

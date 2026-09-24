@@ -686,15 +686,15 @@ async def test_apply_personality_restores_profile_when_tool_initialization_fails
 async def test_local_stream_change_voice_delegates_without_backend_restart() -> None:
     """LocalStream voice changes should update the active handler without rebuilding it."""
     handler = MagicMock()
-    handler.change_voice = AsyncMock(return_value="Voice changed to Serena.")
-    handler.get_current_voice = MagicMock(return_value="Serena")
+    handler.change_voice = AsyncMock(return_value="Voice changed to Sofia.")
+    handler.get_current_voice = MagicMock(return_value="Sofia")
     stream = LocalStream(handler, MagicMock())
 
-    status = await stream.change_voice("Serena")
+    status = await stream.change_voice("Sofia")
 
-    assert status == "Voice changed to Serena."
-    handler.change_voice.assert_awaited_once_with("Serena")
-    assert stream._voice_override == "Serena"
+    assert status == "Voice changed to Sofia."
+    handler.change_voice.assert_awaited_once_with("Sofia")
+    assert stream._voice_override == "Sofia"
     assert not stream._restart_requested.is_set()
 
 
@@ -721,7 +721,7 @@ def test_local_stream_persist_personality_clears_legacy_startup_env_overrides(tm
     )
     stream = LocalStream(MagicMock(), MagicMock(), instance_path=str(tmp_path))
 
-    stream._persist_personality(None, "Aiden")
+    stream._persist_personality(None, "Aria")
 
     env_text = env_path.read_text(encoding="utf-8")
     assert "HF_TOKEN=test-token" in env_text
@@ -737,7 +737,7 @@ def test_local_stream_persist_personality_clears_legacy_startup_env_overrides(tm
 
     settings = load_startup_settings_into_runtime(tmp_path)
 
-    assert settings == StartupSettings(voice="Aiden")
+    assert settings == StartupSettings(voice="Aria")
     assert applied_profiles == [None]
 
 
