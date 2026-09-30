@@ -79,6 +79,14 @@ def request_stop_current_app(robot: ReachyMini, logger: logging.Logger) -> bool:
             timeout_s=_STOP_CURRENT_APP_TIMEOUT_S,
         )
     except DaemonApiError as e:
+        # The daemon uses this detail for STOPPING, DONE, and no current app.
+        if e.status_code == 400 and e.detail == "No app is currently running":
+            logger.info(
+                "Current app via %s is already stopped or stopping (HTTP %s)",
+                _STOP_CURRENT_APP_PATH,
+                e.status_code,
+            )
+            return True
         logger.error("Failed to request current app stop: %s", e)
         return False
 
