@@ -125,12 +125,20 @@ HF_REALTIME_CONNECTION_MODE=deployed
 
 Deployed session allocation falls back to cached `hf auth login` credentials and reports the daemon-provided hardware ID when available. Cached credentials and the hardware ID are not sent to local endpoints.
 
-Run your own realtime voice backend using [speech-to-speech](https://github.com/huggingface/speech-to-speech) on the same machine as the conversation app:
+Run a standalone OpenAI-compatible realtime voice service, such as [speech-to-speech](https://github.com/huggingface/speech-to-speech), independently of the app. Configure and start the service in its own environment, then point the app at its websocket endpoint:
 
 ```env
 HF_REALTIME_CONNECTION_MODE=local
 HF_REALTIME_WS_URL=ws://127.0.0.1:8765/v1/realtime
 ```
+
+The app uses the existing `/v1/realtime` websocket contract; it does not install or
+start the service. A base URL ending in `/v1` also works, and `wss://` is supported
+for TLS endpoints. Configure backend models, provider credentials, and optional
+perception features in the service's own environment. The app's voice selector
+still uses its curated Hugging Face voice catalogue, so a service with different
+voices needs compatible voice names or aliases. Custom scene/speaker events are
+not displayed by the app.
 
 Run your own Hugging Face backend on your laptop and connect to it from Reachy Mini Wireless over the same Wi-Fi network:
 
