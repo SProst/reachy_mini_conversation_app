@@ -1,0 +1,32 @@
+name: PR title
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    name: conventional-pr-title
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      # Execute only the trusted base revision, never the PR head or merge ref.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+          sparse-checkout: scripts/check_pr_title.py
+          sparse-checkout-cone-mode: false
+
+      - name: Validate squash commit title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: python3 scripts/check_pr_title.py
