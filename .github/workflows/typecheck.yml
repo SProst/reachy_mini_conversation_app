@@ -41,6 +41,7 @@ jobs:
         with:
           python-version: "3.12"
           version: "0.12.19"
+          cache-local-path: ${{ github.workspace }}/cache/dev/uv
 
       - name: Install deps (locked)
         run: python scripts/dev.py setup

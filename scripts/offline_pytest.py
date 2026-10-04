@@ -8,6 +8,7 @@ import logging
 import tempfile
 from pathlib import Path
 from weakref import WeakSet
+from unittest.mock import patch
 
 from dev import development_environment
 
@@ -35,19 +36,22 @@ def main() -> None:
         )
         os.environ.clear()
         os.environ.update(environment)
-        bound_sockets: WeakSet[socket.socket] = WeakSet()
+        listeners: WeakSet[socket.socket] = WeakSet()
+
+        socket_listen = socket.socket.listen
+
+        def record_listener(listener: socket.socket, backlog: int = min(128, socket.SOMAXCONN), /) -> None:
+            """Track successful listen calls without querying macOS's unsupported SO_ACCEPTCONN."""
+            socket_listen(listener, backlog)
+            listeners.add(listener)
 
         def guard_network(event: str, arguments: tuple[object, ...]) -> None:
-            if event == "socket.bind" and isinstance(arguments[0], socket.socket):
-                bound_sockets.add(arguments[0])
             if event == "socket.connect":
                 address = arguments[1]
                 if isinstance(address, tuple) and address[0] in {"127.0.0.1", "::1"}:
-                    for listener in list(bound_sockets):
+                    for listener in list(listeners):
                         try:
-                            if listener.getsockname()[:2] == address[:2] and listener.getsockopt(
-                                socket.SOL_SOCKET, socket.SO_ACCEPTCONN
-                            ):
+                            if listener.getsockname()[:2] == address[:2]:
                                 return
                         except OSError as error:
                             logger.debug("Test listener is no longer available: %s", error)
@@ -65,7 +69,8 @@ def main() -> None:
 
         sys.addaudithook(guard_network)
         sys.argv = ["pytest", *(sys.argv[1:] or ["tests/", "-v"])]
-        runpy.run_module("pytest", run_name="__main__")
+        with patch.object(socket.socket, "listen", record_listener):
+            runpy.run_module("pytest", run_name="__main__")
 
 
 if __name__ == "__main__":

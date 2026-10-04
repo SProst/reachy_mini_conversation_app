@@ -53,14 +53,21 @@ def test_offline_runner_blocks_external_sockets(tmp_path: Path, operation: str) 
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_offline_runner_allows_test_owned_loopback(tmp_path: Path) -> None:
+@pytest.mark.parametrize("socket_options_available", [True, False])
+def test_offline_runner_allows_test_owned_loopback(tmp_path: Path, socket_options_available: bool) -> None:
     """A test can connect to the loopback server it created."""
     result = _probe(
         tmp_path,
-        """
+        f"""
+        import errno
         import socket
 
-        def test_local_server():
+        def test_local_server(monkeypatch):
+            def unsupported_socket_option(*args):
+                raise OSError(errno.ENOPROTOOPT, 'Socket option unavailable')
+
+            if not {socket_options_available}:
+                monkeypatch.setattr(socket.socket, 'getsockopt', unsupported_socket_option)
             with socket.socket() as server, socket.socket() as client:
                 server.bind(('127.0.0.1', 0))
                 server.listen()
@@ -68,6 +75,29 @@ def test_offline_runner_allows_test_owned_loopback(tmp_path: Path) -> None:
                 client.connect(server.getsockname())
                 accepted, _ = server.accept()
                 accepted.close()
+        """,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("listener_state", ["bound", "closed"])
+def test_offline_runner_rejects_inactive_listener(tmp_path: Path, listener_state: str) -> None:
+    """Binding a socket or retaining a closed listener does not authorize connections."""
+    result = _probe(
+        tmp_path,
+        f"""
+        import socket
+        import pytest
+
+        def test_inactive_listener():
+            with socket.socket() as server, socket.socket() as client:
+                server.bind(('127.0.0.1', 0))
+                address = server.getsockname()
+                if {listener_state!r} == 'closed':
+                    server.listen()
+                    server.close()
+                with pytest.raises(ConnectionRefusedError, match='No test-owned listener'):
+                    client.connect(address)
         """,
     )
     assert result.returncode == 0, result.stdout + result.stderr
