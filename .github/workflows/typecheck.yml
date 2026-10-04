@@ -5,10 +5,12 @@ on:
     paths:
       - "src/**"
       - "tests/**"
+      - "scripts/**"
       - ".github/workflows/**"
       - "pyproject.toml"
       - "uv.lock"
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -38,9 +40,10 @@ jobs:
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990  # v8.3.2
         with:
           python-version: "3.12"
+          version: "0.12.19"
 
       - name: Install deps (locked)
-        run: uv sync --frozen --group dev
+        run: python scripts/dev.py setup
 
       - name: Run mypy
-        run: uv run mypy
+        run: python scripts/dev.py types
