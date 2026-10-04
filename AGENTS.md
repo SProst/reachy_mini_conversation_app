@@ -27,6 +27,7 @@ Everything below expands these.
 The bar we hold, and the *why* behind the rules:
 
 - **Built on the Reachy Mini SDK.** This app runs on top of [`reachy_mini`](https://github.com/pollen-robotics/reachy_mini) (declared in `pyproject.toml`, locked in `uv.lock`, installed alongside it). Build on the SDK's public API. Don't fork, vendor, or monkey-patch its internals, and keep the app working when the SDK version bumps.
+- **Repository scope.** Own the app, UI, tools, robot integration and speech-service client contracts. Model serving and service deployment belong outside this repository. Use the [documented endpoint configuration](README.md#configuration); keep private service source, deployment configuration, credentials and private service locations out of public changes.
 - **Design before code.** Think non-trivial changes through and state the trade-offs. The realtime conversation loop lives in `huggingface_realtime.py`; keep shared behaviour there.
 - **Graceful degradation.** A tool returns `{"error": ...}` rather than crashing the conversation loop.
 - **Tests cover essential behavior**, not every line.
@@ -60,6 +61,8 @@ These are the cleanups we make in review over and over. Write code that wouldn't
 - **Cover the essential features, not every thin thing.** A good test fails when behavior breaks, not when you rename a variable.
 - A bug fix needs a regression test. A feature needs at least a happy-path test.
 - Deliberately skipping a test (e.g. pure hardening)? Say so and let the human decide.
+- Use the offline runner below; preserve configuration isolation, external socket blocking and access only to test-owned loopback listeners. Its Python guard is not an OS-wide network sandbox for arbitrary native code or subprocesses.
+- Native dependency setup and import checks do not validate GPU inference, providers, live speech or a robot. Run GPU, provider or live hardware checks, or start the app against a live service, only within the task's authorized targets. Report which platforms and integrations were actually tested; local success does not establish cross-platform or hardware compatibility.
 
 ## Pull requests
 
@@ -68,6 +71,8 @@ These are the cleanups we make in review over and over. Write code that wouldn't
 - **Issue first for a feature or any non-trivial change**, so we agree on the approach before the code exists and you don't build something we can't merge. A small, obvious fix (typo, one-line bug) can go straight to a PR.
 - **Fill in the PR template, never overwrite it.** `.github/pull_request_template.md` exists for humans to read and to manually check their own work. Tick the boxes that apply and complete the sections. Do not rewrite, restructure, or delete any of it.
 - **PR title:** explain the work. Do not put agent or model names in it (no `codex`, `claude`, and so on).
+- Follow the [GitHub Flow and release conventions](README.md#github-flow-and-release-conventions): short-lived branches, reviewed PRs into releasable `main`, and Conventional Commit titles for squash merges. Merge, release and deployment remain separate authorized actions.
+- Preserve retained checkpoint branches, upstream tags and inherited package metadata unless the task explicitly changes them. Do not infer a fork release version or enable upstream publishing; follow the README's fork release policy.
 - **PR description:** concise and concrete. State what changed and why. 
 - **Update `.env.example` for new config vars**. Never commit secrets or `.env`.
 
@@ -85,7 +90,7 @@ These are the cleanups we make in review over and over. Write code that wouldn't
 - **PEP 8 and the Google Python Style Guide are the baseline.** Ruff enforces what it can (line length 119, double quotes, isort `length-sort`). Don't fight the formatter or dodge a lint rule with clever constructs.
 - **mypy runs `strict`** (`python_version = 3.12`), with no new ignores.
 - **Modern typing for new code:** built-in generics (`list[str]`, `dict[str, int]`) and `X | None`, not `typing.List` or `Optional`. Some old modules still use the old style. Match the modern one.
-- **No PEP 695 syntax** (`type Alias = ...`, `def f[T](...)`) and no `from __future__ import annotations`. The package targets `>=3.10`, where PEP 695 is a hard syntax error.
+- **No PEP 695 syntax** (`type Alias = ...`, `def f[T](...)`) and no `from __future__ import annotations`. Respect `project.requires-python` in `pyproject.toml`; the development toolchain does not raise the supported runtime minimum.
 - **Cross-platform** (Linux, macOS, Windows): no hardcoded paths, no shell-specific commands, no OS-only APIs without a documented fallback.
 - **Flag any new dependency before adding it.**
 
@@ -94,14 +99,15 @@ These are the cleanups we make in review over and over. Write code that wouldn't
 ```
 src/reachy_mini_conversation_app/
   main.py                 # entry point + CLI (reachy-mini-conversation-app)
-  huggingface_realtime.py # Hugging Face backend + shared realtime conversation loop
+  huggingface_realtime.py # speech-service client + shared realtime conversation loop
   conversation_handler.py # wires audio/tools/backend together
   config.py               # configuration + env loading
   personality.py          # personality/profile loading
   tools/                  # LLM-callable tools (one file per tool)
   audio/, memory/, sounds/, static/
 profiles/                 # bundled personalities (one dir per profile)
-tests/                    # pytest suite, mirrors the src layout
+scripts/                  # setup, offline validation and PR metadata checks
+tests/                    # app and development-command behavior checks
 ```
 
 Architecture overview: [`README.md`](README.md#architecture).
@@ -111,25 +117,20 @@ Architecture overview: [`README.md`](README.md#architecture).
 
 ## Commands
 
-Set up the environment per the [README installation guide](README.md#installation). With the venv active, run the tools directly. Run the full gate before handing work back. CI runs the same checks on Linux, macOS, and Windows:
+Use the canonical [repeatable development checks](README.md#repeatable-development-checks). Prepare dependencies online in this checkout, then run the full offline gate before handing work back:
 
 ```bash
-ruff check . --fix && ruff format . && mypy --pretty --show-error-codes && pytest tests/ -v
+python scripts/dev.py setup
+python scripts/dev.py check
 ```
 
-| Task        | Command                              |
-|-------------|--------------------------------------|
-| Lint + fix  | `ruff check . --fix`                 |
-| Format      | `ruff format .`                      |
-| Type-check  | `mypy --pretty --show-error-codes`   |
-| Tests       | `pytest tests/ -v`                   |
-| Run the app | `reachy-mini-conversation-app`       |
+The README covers prerequisites, optional local native dependencies and individual checks. Use the checkout's `.venv` and cache; do not alter another saved environment or copy platform-specific environments between machines. `check` must not install dependencies, download models or contact external services.
 
-If you change dependencies, keep `uv.lock` in sync by running `uv lock` (CI validates it).
+If intentionally changing dependencies, update `uv.lock` and rerun setup and checks. Do not refresh the lockfile as a side effect of validation.
 
 ## Continuous integration
 
-`.github/workflows/` holds eight live, load-bearing workflows. The first four gate every PR. The local gate above mirrors them, so green locally means green CI.
+`.github/workflows/` runs the checks below. Verify hosted results for the reviewed head separately from local results. Publishing jobs are restricted to the upstream repository; preserve those guards in this fork. The PR-title workflow runs only the trusted base checker with read-only permissions and no secrets; never execute PR-head code in that metadata job.
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
@@ -137,10 +138,11 @@ If you change dependencies, keep `uv.lock` in sync by running `uv lock` (CI vali
 | **Type check** (`typecheck.yml`) | push, PR | `mypy` strict |
 | **Pytest** (`pytest.yml`) | PR, push to `main` | tests on Linux, macOS, Windows |
 | **uv.lock check** (`uv-lock-check.yml`) | PR | `uv.lock` matches `pyproject.toml` |
-| **Allure Report** (`allure.yml`) | push to `main`, manual | publishes test and coverage reports to GitHub Pages |
-| **Release** (`release.yml`) | tag `v*` | publishes the GitHub release |
-| **Sync to HF Space** (`sync-hf-space.yml`) | tag, manual | mirrors releases to the Hugging Face Space |
-| **PR Preview** (`pr-hf-space-preview.yml`) | PR | spins up a private preview Space per PR |
+| **PR title** (`pr-title.yml`) | PR metadata targeting `main` | validates the Conventional Commit squash title once the checker reaches the base branch |
+| **Allure Report** (`allure.yml`) | push to `main`, manual | upstream only: publishes test and coverage reports to GitHub Pages |
+| **Release** (`release.yml`) | tag `v*` | upstream only: publishes the GitHub release |
+| **Sync to HF Space** (`sync-hf-space.yml`) | tag, manual | upstream only: mirrors releases to the Hugging Face Space |
+| **PR Preview** (`pr-hf-space-preview.yml`) | PR | upstream only: creates a private preview Space per PR |
 
 ---
 
