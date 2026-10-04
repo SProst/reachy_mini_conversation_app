@@ -106,7 +106,7 @@ line-ending = "auto"
 
 [tool.mypy]
 python_version = "3.12"
-files = ["src/"]
+files = ["src/", "scripts/"]
 ignore_missing_imports = true
 strict = true
 show_error_codes = true
