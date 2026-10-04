@@ -4,6 +4,7 @@ on:
     paths:
       - "src/**"
       - "tests/**"
+      - "scripts/**"
       - ".github/workflows/lint.yml"
       - "pyproject.toml"
       - "uv.lock"
@@ -31,13 +32,12 @@ jobs:
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990  # v8.3.2
         with:
           python-version: "3.12"
+          version: "0.12.19"
           enable-cache: true
+          cache-local-path: ${{ github.workspace }}/cache/dev/uv
 
       - name: Install development tools
-        run: uv sync --frozen --only-group dev --no-install-project
+        run: python scripts/dev.py setup --tools-only
 
-      - name: Ruff check
-        run: uv run --no-sync ruff check .
-
-      - name: Ruff format
-        run: uv run --no-sync ruff format --check .
+      - name: Ruff check and format
+        run: python scripts/dev.py lint

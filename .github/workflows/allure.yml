@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   allure:
+    if: ${{ github.repository == 'pollen-robotics/reachy_mini_conversation_app' }}
     name: allure
     runs-on: ubuntu-latest
     timeout-minutes: 20

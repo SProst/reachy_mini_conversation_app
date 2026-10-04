@@ -89,10 +89,64 @@ pip install -e .
 
 Install dev dependencies:
 ```bash
-pip install -e .[dev]                   # Development tools
+uv sync --frozen --group dev            # Development tools use a dependency group
 ```
 
 </details>
+
+### Repeatable development checks
+
+Use Python 3.12, [uv 0.12.19](https://docs.astral.sh/uv/getting-started/installation/),
+and Git LFS. Run these commands from the checkout:
+
+```bash
+python scripts/dev.py setup
+python scripts/dev.py check
+```
+
+`setup` is the online preparation step: it installs the locked development
+environment in `.venv` and fetches only the avatar SVGs needed by the tests.
+It does not download models or datasets, start the app, or contact a robot.
+`check` runs Ruff, formatting checks, strict mypy, an offline lockfile check,
+and the complete pytest suite. It does not install or update dependencies.
+Use `lint`, `types`, `lock`, or `test` instead of `check` for one gate; arguments
+after `test` are passed to pytest, for example `python scripts/dev.py test tests/test_config.py -v`.
+
+On Linux, install Cairo, GObject Introspection and the GStreamer base typelibs
+before setup (`libcairo2-dev`, `libgirepository1.0-dev`, and
+`gir1.2-gst-plugins-base-1.0` on Debian/Ubuntu). A Debian cloud workspace without
+sudo can acquire those files locally:
+
+```bash
+python scripts/dev.py setup --local-native
+python scripts/dev.py check
+```
+
+This opt-in bootstrap downloads signed Debian package-index metadata and extracts
+packages under `cache/dev/native`; it does not install system packages. The apt
+plan and acquired package versions are recorded under `cache/dev/apt`. Native
+packages follow the distribution's repositories; only Python dependencies are
+locked. Keep `cache/dev` to repeat checks offline on the same platform. Do not
+copy virtual environments or native-library caches between operating systems.
+Setup reuses a completed native cache; remove `cache/dev/apt` and
+`cache/dev/native` together when intentionally refreshing native packages.
+On macOS, install `cairo` and `gobject-introspection` with Homebrew before setup.
+Windows remains experimental and may need native SDK prerequisites installed
+separately. The Debian bootstrap is not used on those platforms.
+
+Tests use temporary app settings and an empty Hugging Face cache, ignore `.env`,
+remove inherited app/provider configuration, and enable offline modes. A Python
+audit hook rejects external socket access while permitting listeners created by
+the tests on loopback for MCP integration coverage. This guards the pytest
+process; it is not an operating-system network sandbox for arbitrary native code
+or subprocesses. Dependency-building subprocesses use `UV_OFFLINE=1` during checks.
+No credentials or running service are needed for these checks, and they do not
+validate hardware, live speech, or inference.
+
+CI uses the same setup and validation scripts. Lint, types, tests and lockfile
+checks need only repository read access. The inherited release, Hugging Face sync,
+preview and Pages-report jobs are restricted to the upstream repository; they do
+not run in forks. Repository-level Actions enablement is managed separately.
 
 ## Configuration
 
