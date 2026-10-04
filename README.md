@@ -148,6 +148,87 @@ checks need only repository read access. The inherited release, Hugging Face syn
 preview and Pages-report jobs are restricted to the upstream repository; they do
 not run in forks. Repository-level Actions enablement is managed separately.
 
+### GitHub Flow and release conventions
+
+Keep `main` releasable. Start small, short-lived `feat/`, `fix/`, `docs/`, or
+`chore/` branches from current `main`, and return changes through reviewed PRs.
+Run `python scripts/dev.py check` and require the hosted checks for the exact
+head being reviewed. Keep incomplete features off by default. A maintainer
+decides when to squash-merge; this repository does not automate merging.
+
+Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) for PR
+titles and the resulting squash commit. Working commits may remain descriptive;
+their individual messages are not checked. Use lowercase `feat`, `fix`, `perf`,
+`refactor`, `docs`, `test`, `build`, `ci`, `chore`, `style`, or `revert`, an optional
+scope such as `(audio)` or `(deps)`, and a concise description:
+
+```text
+fix(audio): retain the selected voice
+feat(tools): add a conversation tool
+feat(config)!: replace the profile format
+```
+
+Scopes start with a lowercase letter or digit and may also contain `.`, `_`, `/`,
+or `-`. Mark breaking changes with `!` in the title and describe the migration
+in the PR body; retain that
+explanation in the squash commit body. Confirm the final squash subject matches
+the reviewed title. The `conventional-pr-title` check validates syntax, not the
+accuracy of the chosen type or compatibility claim. To check a title locally:
+
+```bash
+python scripts/check_pr_title.py "fix(audio): retain the selected voice"
+```
+
+The metadata check runs on `pull_request_target`, checks out only the trusted
+base commit, and passes the title as an environment value. It uses no repository
+secrets, package installation, PR code, or write token permissions. It becomes
+available once the workflow and checker reach `main`; changes to the checker
+are covered by ordinary PR tests. Making checks required or restricting merge
+methods is a separate repository-settings decision for a maintainer.
+
+Use [Semantic Versioning](https://semver.org/spec/v2.0.0.html) when planning an
+approved release: incompatible changes to documented configuration, CLI,
+profiles, tools, or service contracts require a major increment; compatible
+features require a minor increment; compatible fixes require a patch increment.
+Choose the highest impact across the release. Documentation, tests and CI work
+alone do not require a release. Types guide review; they do not automatically
+choose versions, create tags, or publish artifacts.
+
+This fork still uses upstream's package name `reachy_mini_conversation_app` and
+version `1.0.1`; its existing `v*` tags were inherited from upstream. Preserve
+those tags. Until maintainers approve an independent fork release identity,
+identify fork revisions by full commit SHA and do not publish modified packages
+as upstream releases or guess the next upstream version. A fork release plan
+must choose the distribution identity, a tag namespace distinct from inherited
+`v*` tags, a version baseline, and any Python packaging version mapping before
+changing `pyproject.toml` and its matching lockfile metadata.
+
+Merging, releasing and deploying are separate decisions. A maintainer reviews
+release notes and the exact green `main` commit, approves a version change in a
+PR, then explicitly creates the approved immutable tag and release. Deployment
+requires its own approval of a destination and that exact revision; neither a
+merge nor a release is approval to deploy. The upstream publishing workflows
+described in `CONTRIBUTING.md` remain restricted to the upstream repository and
+do not publish or deploy this fork. No fork publishing automation is enabled.
+
+### Dependency update proposals
+
+[`.github/dependabot.yml`](.github/dependabot.yml) proposes weekly Monday checks
+at 09:00 UTC for the root uv project and GitHub Actions, with at most two open
+version-update PRs per ecosystem. Minor/patch updates are grouped; Reachy SDK
+packages stay separate from other Python dependencies. Major updates remain
+individual proposals. Bot titles use `build(deps):` or `ci(deps):` to fit the
+squash-title check.
+
+Review each proposal and its lockfile changes against the existing offline and
+platform checks; SDK changes may also need separately authorized hardware
+validation. Merging remains manual, and upstream publishing guards stay intact.
+This configuration does not enable security alerts or automatic security updates;
+their settings remain separate, and security PRs are outside the version-update
+limit. Fork version updates also require repository-level enablement. Committing
+this file to `main` and enabling fork updates require maintainer approval;
+no registry credentials or private service configuration are included.
+
 ## Configuration
 
 The default setup uses the Hugging Face backend and does not require an API key.
