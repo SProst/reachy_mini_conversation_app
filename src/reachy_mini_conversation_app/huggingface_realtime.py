@@ -948,6 +948,9 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
                                 AdditionalOutputs({"role": "assistant", "content": f"[error] {msg}"})
                             )
             finally:
+                # A wait completing during cancellation can otherwise start another response cycle.
+                if self.connection is conn:
+                    self.connection = None
                 # Stop the response sender worker.
                 if response_sender_task is not None:
                     response_sender_task.cancel()

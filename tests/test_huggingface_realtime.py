@@ -172,6 +172,48 @@ def _messages(items: list[Any]) -> list[dict[str, Any]]:
     return [item.args[0] for item in items if isinstance(item, AdditionalOutputs)]
 
 
+@pytest.mark.parametrize("startup_error", [False, True])
+@pytest.mark.asyncio
+async def test_session_disconnects_before_stopping_background_tasks(
+    monkeypatch: pytest.MonkeyPatch, startup_error: bool
+) -> None:
+    """Session teardown prevents background workers from using the closed connection."""
+    handler = _session_handler(monkeypatch, ())
+    sender_started = asyncio.Event()
+    sender_stopped = asyncio.Event()
+
+    async def response_sender() -> None:
+        sender_started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            assert handler.connection is None
+            sender_stopped.set()
+
+    async def greeting() -> None:
+        await sender_started.wait()
+        if startup_error:
+            raise RuntimeError("Greeting failed")
+
+    async def shutdown_tools() -> None:
+        assert handler.connection is None
+        assert sender_stopped.is_set()
+
+    shutdown = AsyncMock(side_effect=shutdown_tools)
+    monkeypatch.setattr(handler, "_response_sender_loop", response_sender)
+    monkeypatch.setattr(handler, "_send_startup_greeting_prompt", greeting)
+    monkeypatch.setattr(type(handler.tool_manager), "shutdown", shutdown)
+
+    if startup_error:
+        with pytest.raises(RuntimeError, match="Greeting failed"):
+            await asyncio.wait_for(handler._run_realtime_session(), timeout=1.0)
+    else:
+        await asyncio.wait_for(handler._run_realtime_session(), timeout=1.0)
+
+    assert handler.connection is None
+    shutdown.assert_awaited_once()
+
+
 @pytest.mark.asyncio
 async def test_partial_transcription_appends_incremental_deltas(monkeypatch: Any) -> None:
     """Partial transcription deltas for one item should accumulate in arrival order."""
