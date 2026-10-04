@@ -211,6 +211,24 @@ merge nor a release is approval to deploy. The upstream publishing workflows
 described in `CONTRIBUTING.md` remain restricted to the upstream repository and
 do not publish or deploy this fork. No fork publishing automation is enabled.
 
+### Dependency update proposals
+
+[`.github/dependabot.yml`](.github/dependabot.yml) proposes weekly Monday checks
+at 09:00 UTC for the root uv project and GitHub Actions, with at most two open
+version-update PRs per ecosystem. Minor/patch updates are grouped; Reachy SDK
+packages stay separate from other Python dependencies. Major updates remain
+individual proposals. Bot titles use `build(deps):` or `ci(deps):` to fit the
+squash-title check.
+
+Review each proposal and its lockfile changes against the existing offline and
+platform checks; SDK changes may also need separately authorized hardware
+validation. Merging remains manual, and upstream publishing guards stay intact.
+This configuration does not enable security alerts or automatic security updates;
+their settings remain separate, and security PRs are outside the version-update
+limit. Fork version updates also require repository-level enablement. Committing
+this file to `main` and enabling fork updates require maintainer approval;
+no registry credentials or private service configuration are included.
+
 ## Configuration
 
 The default setup uses the Hugging Face backend and does not require an API key.
